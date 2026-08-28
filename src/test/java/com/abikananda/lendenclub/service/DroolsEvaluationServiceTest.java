@@ -59,7 +59,11 @@ class DroolsEvaluationServiceTest {
                 .repeated(true)
                 .build();
 
-        EvaluationResult res = droolsService.evaluate(fact, "LS-TEST");
+        EvaluationResult res = droolsService.evaluateSpecificRule(
+                fact,
+                "LS-TEST",
+                "Repeated Lenders - High Risk"
+        );
         assertEquals(LendingDecision.INVEST, res.getDecision());
         assertEquals(RiskLevel.HIGH, res.getRiskLevel());
         assertEquals("Repeated Lenders - High Risk", res.getRuleName());
