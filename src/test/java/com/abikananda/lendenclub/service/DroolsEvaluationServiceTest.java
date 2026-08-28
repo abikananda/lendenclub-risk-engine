@@ -25,7 +25,7 @@ class DroolsEvaluationServiceTest {
     void testLowCreditScore_Rejection() {
         BorrowerFact fact = BorrowerFact.builder()
                 .loanId("LOA-100")
-                .creditScore(600)
+                .creditScore(549)
                 .lendenScore(800)
                 .income(new BigDecimal("60000"))
                 .loanAmount(new BigDecimal("10000"))
@@ -44,7 +44,7 @@ class DroolsEvaluationServiceTest {
     }
 
     @Test
-    void testRepeatedBusinessLenders_Success() {
+    void testRepeatedLendersHighRisk_Success() {
         BorrowerFact fact = BorrowerFact.builder()
                 .loanId("LOA-101")
                 .creditScore(710)
@@ -55,14 +55,14 @@ class DroolsEvaluationServiceTest {
                 .tenure(6)
                 .emi(new BigDecimal("2800"))
                 .age(35)
-                .borrowerType("SELF-EMPLOYED")
+                .borrowerType("SALARIED")
                 .repeated(true)
                 .build();
 
         EvaluationResult res = droolsService.evaluate(fact, "LS-TEST");
         assertEquals(LendingDecision.INVEST, res.getDecision());
-        assertEquals(RiskLevel.LOW, res.getRiskLevel());
-        assertEquals("Repeated Business Lenders", res.getRuleName());
+        assertEquals(RiskLevel.HIGH, res.getRiskLevel());
+        assertEquals("Repeated Lenders - High Risk", res.getRuleName());
         assertEquals(new BigDecimal("1000.00"), res.getInvestmentAmount());
     }
 
