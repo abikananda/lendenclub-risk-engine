@@ -5,6 +5,7 @@ import com.abikananda.lendenclub.exception.RuleEvaluationException;
 import org.junit.jupiter.api.Test;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
+import org.kie.api.runtime.rule.AgendaFilter;
 
 import java.math.BigDecimal;
 
@@ -23,7 +24,7 @@ class RuleEvaluationFailureTest {
         KieSession session = mock(KieSession.class);
         when(container.newKieSession()).thenReturn(session);
         doThrow(new ArithmeticException("simulated rule arithmetic failure"))
-                .when(session).fireAllRules(any());
+                .when(session).fireAllRules(any(AgendaFilter.class));
 
         DroolsEvaluationService service = new DroolsEvaluationService(container);
         BorrowerFact fact = BorrowerFact.builder()
