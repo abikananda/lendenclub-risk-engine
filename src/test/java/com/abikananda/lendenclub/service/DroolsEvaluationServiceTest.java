@@ -85,4 +85,54 @@ class DroolsEvaluationServiceTest {
         EvaluationResult res = droolsService.evaluate(fact, "LS-TEST");
         assertEquals(LendingDecision.SKIP, res.getDecision());
     }
+
+    @Test
+    void testBulkLenders_RepeatingDecimalRatio_DoesNotThrow() {
+        BorrowerFact fact = BorrowerFact.builder()
+                .loanId("LOA-RATIO-BULK")
+                .creditScore(620)
+                .lendenScore(760)
+                .income(new BigDecimal("93566"))
+                .loanAmount(new BigDecimal("5500"))
+                .interestRate(new BigDecimal("36.48"))
+                .tenure(4)
+                .emi(new BigDecimal("1375"))
+                .age(47)
+                .borrowerType("SALARIED")
+                .repeated(false)
+                .build();
+
+        EvaluationResult res = assertDoesNotThrow(
+                () -> droolsService.evaluateSpecificRule(fact, "LS-TEST", "Bulk Lenders")
+        );
+
+        assertEquals(LendingDecision.INVEST, res.getDecision());
+        assertEquals("Bulk Lenders", res.getRuleName());
+        assertEquals(new BigDecimal("250.00"), res.getInvestmentAmount());
+    }
+
+    @Test
+    void testRepeatedLenders_RepeatingDecimalRatio_DoesNotThrow() {
+        BorrowerFact fact = BorrowerFact.builder()
+                .loanId("LOA-RATIO-REPEATED")
+                .creditScore(701)
+                .lendenScore(800)
+                .income(new BigDecimal("25026"))
+                .loanAmount(new BigDecimal("4000"))
+                .interestRate(new BigDecimal("36.48"))
+                .tenure(4)
+                .emi(new BigDecimal("1000"))
+                .age(42)
+                .borrowerType("SALARIED")
+                .repeated(true)
+                .build();
+
+        EvaluationResult res = assertDoesNotThrow(
+                () -> droolsService.evaluateSpecificRule(fact, "LS-TEST", "Repeated Lenders - High Risk")
+        );
+
+        assertEquals(LendingDecision.INVEST, res.getDecision());
+        assertEquals("Repeated Lenders - High Risk", res.getRuleName());
+        assertEquals(new BigDecimal("1000.00"), res.getInvestmentAmount());
+    }
 }
