@@ -28,6 +28,22 @@ function boolean isMonthlyPaymentAcceptable(BigDecimal loanAmount, int tenure, B
     return monthlyPayment.compareTo(income.multiply(new BigDecimal("0.30"))) <= 0;
 }
 
+function boolean isRatioAtMost(BigDecimal numerator, BigDecimal denominator, BigDecimal maxRatio) {
+    if (numerator == null || denominator == null || maxRatio == null || denominator.signum() <= 0) {
+        return false;
+    }
+    return numerator.compareTo(denominator.multiply(maxRatio)) <= 0;
+}
+
+function boolean isMonthlyPaymentRatioAtMost(BigDecimal loanAmount, int tenure, BigDecimal income, BigDecimal maxRatio) {
+    if (loanAmount == null || income == null || maxRatio == null || tenure <= 0 || income.signum() <= 0) {
+        return false;
+    }
+    return loanAmount.compareTo(
+            income.multiply(maxRatio).multiply(BigDecimal.valueOf(tenure))
+    ) <= 0;
+}
+
 rule "Reject - Low Credit Score"
     salience 100
     when
@@ -82,8 +98,8 @@ rule "Repeated Lenders - High Risk"
             age >= 18 && age <= 60,
             loanAmount <= new BigDecimal("100000"),
             tenure >= 1 && tenure <= 12,
-            eval((loanAmount * 1.0 / income) <= 0.50),
-            eval((loanAmount * 1.0 / tenure) <= income * 0.40)
+            eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.50"))),
+            eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.40")))
         )
     then
         evaluationResult.setDecision(LendingDecision.INVEST);
@@ -106,8 +122,8 @@ rule "Bulk Lenders"
             age >= 20 && age <= 60,
             loanAmount <= new BigDecimal("100000"),
             tenure >= 1 && tenure <= 12,
-            eval((loanAmount * 1.0 / income) <= 0.90),
-            eval((loanAmount * 1.0 / tenure) <= income * 0.50)
+            eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.90"))),
+            eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.50")))
         )
     then
         evaluationResult.setDecision(LendingDecision.INVEST);
