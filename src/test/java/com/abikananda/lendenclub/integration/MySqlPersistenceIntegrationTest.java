@@ -1,12 +1,18 @@
 package com.abikananda.lendenclub.integration;
 
 import com.abikananda.lendenclub.domain.InvestmentStatus;
+import com.abikananda.lendenclub.domain.LendingDecision;
+import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
+import com.abikananda.lendenclub.dto.BorrowerEvaluateResponse;
 import com.abikananda.lendenclub.dto.InvestmentStatusRequest;
 import com.abikananda.lendenclub.entity.Lender;
 import com.abikananda.lendenclub.entity.LendingSession;
+import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
+import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import com.abikananda.lendenclub.repository.InvestmentRepository;
 import com.abikananda.lendenclub.repository.LenderRepository;
 import com.abikananda.lendenclub.repository.LendingSessionRepository;
+import com.abikananda.lendenclub.service.BorrowerEvaluationService;
 import com.abikananda.lendenclub.service.InvestmentService;
 import com.abikananda.lendenclub.service.LendingSessionService;
 import org.junit.jupiter.api.Test;
@@ -22,6 +28,7 @@ import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest
@@ -39,6 +46,7 @@ class MySqlPersistenceIntegrationTest {
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
         registry.add("spring.flyway.baseline-on-migrate", () -> false);
+        registry.add("server.address", () -> "0.0.0.0");
     }
 
     @Autowired
@@ -56,8 +64,17 @@ class MySqlPersistenceIntegrationTest {
     @Autowired
     private InvestmentRepository investmentRepository;
 
+    @Autowired
+    private BorrowerEvaluationService borrowerEvaluationService;
+
+    @Autowired
+    private BorrowerEvaluationRepository evaluationRepository;
+
+    @Autowired
+    private BorrowerSnapshotRepository snapshotRepository;
+
     @Test
-    void flywayCreatesSchemaAndDuplicateInvestmentIsIdempotent() {
+    void flywayCreatesSchemaAndCrossStackPersistenceIsConsistent() {
         Lender lender = lenderRepository.save(Lender.builder()
                 .externalLenderId("LENDER-TEST")
                 .displayName("Integration Test Lender")
@@ -71,6 +88,26 @@ class MySqlPersistenceIntegrationTest {
 
         LendingSession session = sessionService.createSession(lender);
         assertNotNull(session.getSessionId());
+
+        BorrowerEvaluateRequest matchingBorrower = borrowerRequest(
+                session.getSessionId(), "LOAN-EVAL-MATCH", 620, 760, "93566", "5500");
+        BorrowerEvaluateResponse matched = borrowerEvaluationService.evaluateSpecificRule(
+                matchingBorrower, "Bulk Lenders");
+
+        assertEquals(LendingDecision.INVEST, matched.getDecision());
+        assertNotNull(matched.getEvaluationId());
+        assertEquals("BULK_LENDERS", matched.getRule());
+        assertEquals(1, evaluationRepository.findByLoanId("LOAN-EVAL-MATCH").size());
+
+        BorrowerEvaluateRequest noMatchBorrower = borrowerRequest(
+                session.getSessionId(), "LOAN-EVAL-NO-MATCH", 620, 650, "93566", "5500");
+        BorrowerEvaluateResponse noMatch = borrowerEvaluationService.evaluateSpecificRule(
+                noMatchBorrower, "Bulk Lenders");
+
+        assertNull(noMatch.getDecision());
+        assertNull(noMatch.getEvaluationId());
+        assertEquals(0, evaluationRepository.findByLoanId("LOAN-EVAL-NO-MATCH").size());
+        assertEquals(2, snapshotRepository.count());
 
         InvestmentStatusRequest request = InvestmentStatusRequest.builder()
                 .sessionId(session.getSessionId())
@@ -87,6 +124,7 @@ class MySqlPersistenceIntegrationTest {
         assertEquals(1, investmentRepository.countBySessionId(session.getSessionId()));
 
         LendingSession persisted = sessionRepository.findBySessionId(session.getSessionId()).orElseThrow();
+        assertEquals(2, persisted.getTotalBorrowersEvaluated());
         assertEquals(1, persisted.getTotalInvestments());
         assertEquals(1, persisted.getSuccessfulInvestments());
         assertEquals(0, new BigDecimal("250.00").compareTo(persisted.getTotalAmountInvested()));
@@ -94,5 +132,28 @@ class MySqlPersistenceIntegrationTest {
                 .orElseThrow()
                 .getLender()
                 .getId());
+    }
+
+    private BorrowerEvaluateRequest borrowerRequest(
+            String sessionId,
+            String loanId,
+            int creditScore,
+            int lendenScore,
+            String income,
+            String loanAmount) {
+        return BorrowerEvaluateRequest.builder()
+                .sessionId(sessionId)
+                .loanId(loanId)
+                .creditScore(creditScore)
+                .lendenScore(lendenScore)
+                .income(new BigDecimal(income))
+                .loanAmount(new BigDecimal(loanAmount))
+                .interestRate(new BigDecimal("36.48"))
+                .tenure(4)
+                .emi(new BigDecimal("1000.00"))
+                .age(35)
+                .borrowerType("SALARIED")
+                .repeated(false)
+                .build();
     }
 }
