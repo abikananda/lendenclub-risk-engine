@@ -10,18 +10,14 @@ import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.drools.core.base.RuleNameEqualsAgendaFilter;
-import org.kie.api.KieServices;
-import org.kie.api.command.Command;
-import org.kie.api.runtime.StatelessKieSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -36,6 +32,7 @@ public class BorrowerEvaluationService {
     private final BorrowerEvaluationRepository evaluationRepository;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private final String engineVersion;
 
     public BorrowerEvaluationService(LendingSessionService sessionService,
                                      DroolsEvaluationService droolsService,
@@ -43,7 +40,8 @@ public class BorrowerEvaluationService {
                                      BorrowerSnapshotRepository snapshotRepository,
                                      BorrowerEvaluationRepository evaluationRepository,
                                      AuditService auditService,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     @Value("${risk-engine.version:1.0.0}") String engineVersion) {
         this.sessionService = sessionService;
         this.droolsService = droolsService;
         this.aiRiskService = aiRiskService;
@@ -51,14 +49,90 @@ public class BorrowerEvaluationService {
         this.evaluationRepository = evaluationRepository;
         this.auditService = auditService;
         this.objectMapper = objectMapper;
+        this.engineVersion = engineVersion;
     }
 
     @Transactional
     public BorrowerEvaluateResponse evaluateAndSave(BorrowerEvaluateRequest req) {
         log.info("sessionId={} loanId={} Evaluating borrower", req.getSessionId(), req.getLoanId());
+        return evaluateAndPersist(req, null);
+    }
 
+    @Transactional
+    public BorrowerEvaluateResponse evaluateSpecificRule(BorrowerEvaluateRequest req, String ruleName) {
+        log.info("sessionId={} loanId={} Evaluating specific rule={}", req.getSessionId(), req.getLoanId(), ruleName);
+        return evaluateAndPersist(req, ruleName);
+    }
+
+    private BorrowerEvaluateResponse evaluateAndPersist(BorrowerEvaluateRequest req, String ruleName) {
         sessionService.validateAndTouchSession(req.getSessionId());
+        saveSnapshot(req);
 
+        BorrowerFact fact = toFact(req);
+        EvaluationResult result = ruleName == null
+                ? droolsService.evaluate(fact, req.getSessionId())
+                : droolsService.evaluateSpecificRule(fact, req.getSessionId(), ruleName);
+
+        String responseRule = result.getRuleName();
+        if (ruleName != null && responseRule != null) {
+            responseRule = LendingRule.fromRuleName(responseRule).name();
+        }
+
+        if (result.getDecision() == null) {
+            auditService.logEvent(
+                    "BORROWER_EVALUATION_NO_MATCH",
+                    req.getSessionId(),
+                    req.getLoanId(),
+                    "RequestedRule=" + ruleName + " Engine=" + engineVersion);
+
+            return BorrowerEvaluateResponse.builder()
+                    .loanId(req.getLoanId())
+                    .sessionId(req.getSessionId())
+                    .decision(null)
+                    .riskLevel(result.getRiskLevel())
+                    .investmentAmount(result.getInvestmentAmount())
+                    .rule(responseRule)
+                    .reason(result.getReason())
+                    .evaluationId(null)
+                    .build();
+        }
+
+        var aiResult = aiRiskService.evaluate(fact);
+
+        BorrowerEvaluation evaluation = BorrowerEvaluation.builder()
+                .loanId(req.getLoanId())
+                .sessionId(req.getSessionId())
+                .decision(result.getDecision())
+                .riskLevel(result.getRiskLevel())
+                .investmentAmount(result.getInvestmentAmount())
+                .ruleName(result.getRuleName())
+                .ruleCode(result.getRuleCode())
+                .reason(result.getReason())
+                .aiRiskScore(aiResult.getRiskScore())
+                .engineVersion(engineVersion)
+                .build();
+
+        evaluation = evaluationRepository.save(evaluation);
+
+        auditService.logEvent(
+                "BORROWER_EVALUATED",
+                req.getSessionId(),
+                req.getLoanId(),
+                "Decision=" + result.getDecision() + " Rule=" + result.getRuleName() + " Engine=" + engineVersion);
+
+        return BorrowerEvaluateResponse.builder()
+                .loanId(req.getLoanId())
+                .sessionId(req.getSessionId())
+                .decision(result.getDecision())
+                .riskLevel(result.getRiskLevel())
+                .investmentAmount(result.getInvestmentAmount())
+                .rule(responseRule)
+                .reason(result.getReason())
+                .evaluationId(evaluation.getId())
+                .build();
+    }
+
+    private void saveSnapshot(BorrowerEvaluateRequest req) {
         try {
             BorrowerSnapshot snapshot = BorrowerSnapshot.builder()
                     .loanId(req.getLoanId())
@@ -77,62 +151,13 @@ public class BorrowerEvaluationService {
                     .build();
             snapshotRepository.save(snapshot);
         } catch (Exception e) {
-            log.error("Failed to save borrower snapshot: {}", e.getMessage());
+            log.error("sessionId={} loanId={} Failed to save borrower snapshot: {}",
+                    req.getSessionId(), req.getLoanId(), e.getMessage());
         }
-
-        BorrowerFact fact = BorrowerFact.builder()
-                .loanId(req.getLoanId())
-                .creditScore(req.getCreditScore())
-                .lendenScore(req.getLendenScore())
-                .income(req.getIncome())
-                .loanAmount(req.getLoanAmount())
-                .interestRate(req.getInterestRate())
-                .tenure(req.getTenure())
-                .emi(req.getEmi())
-                .age(req.getAge())
-                .borrowerType(req.getBorrowerType())
-                .repeated(req.getRepeated())
-                .build();
-
-        EvaluationResult result = droolsService.evaluate(fact, req.getSessionId());
-        var aiResult = aiRiskService.evaluate(fact);
-
-        BorrowerEvaluation evaluation = BorrowerEvaluation.builder()
-                .loanId(req.getLoanId())
-                .sessionId(req.getSessionId())
-                .decision(result.getDecision())
-                .riskLevel(result.getRiskLevel())
-                .investmentAmount(result.getInvestmentAmount())
-                .ruleName(result.getRuleName())
-                .ruleCode(result.getRuleCode())
-                .reason(result.getReason())
-                .aiRiskScore(aiResult.getRiskScore())
-                .engineVersion("1.0.0")
-                .build();
-
-        evaluation = evaluationRepository.save(evaluation);
-
-        auditService.logEvent("BORROWER_EVALUATED", req.getSessionId(), req.getLoanId(),
-                "Decision=" + result.getDecision() + " Rule=" + result.getRuleName());
-
-        return BorrowerEvaluateResponse.builder()
-                .loanId(req.getLoanId())
-                .sessionId(req.getSessionId())
-                .decision(result.getDecision())
-                .riskLevel(result.getRiskLevel())
-                .investmentAmount(result.getInvestmentAmount())
-                .rule(result.getRuleName())
-                .reason(result.getReason())
-                .evaluationId(evaluation.getId())
-                .build();
     }
 
-    /**
-     * Evaluates a borrower against a single predefined rule by its exact name.
-     */
-    public BorrowerEvaluateResponse evaluateSpecificRule(BorrowerEvaluateRequest req, String ruleName) {
-        log.info("sessionId={} loanId={} Evaluating specific rule={}", req.getSessionId(), req.getLoanId(), ruleName);
-        BorrowerFact fact = BorrowerFact.builder()
+    private BorrowerFact toFact(BorrowerEvaluateRequest req) {
+        return BorrowerFact.builder()
                 .loanId(req.getLoanId())
                 .creditScore(req.getCreditScore())
                 .lendenScore(req.getLendenScore())
@@ -144,17 +169,6 @@ public class BorrowerEvaluationService {
                 .age(req.getAge())
                 .borrowerType(req.getBorrowerType())
                 .repeated(req.getRepeated())
-                .build();
-        EvaluationResult result = droolsService.evaluateSpecificRule(fact, req.getSessionId(), ruleName);
-
-        return BorrowerEvaluateResponse.builder()
-                .loanId(req.getLoanId())
-                .sessionId(req.getSessionId())
-                .decision(result.getDecision())
-                .riskLevel(result.getRiskLevel())
-                .investmentAmount(result.getInvestmentAmount())
-                .rule(result.getRuleName()!=null?LendingRule.fromRuleName(result.getRuleName()).name():null)
-                .reason(result.getReason())
                 .build();
     }
 
