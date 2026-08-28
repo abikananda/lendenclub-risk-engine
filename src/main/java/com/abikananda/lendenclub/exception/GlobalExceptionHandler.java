@@ -30,11 +30,21 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", ex.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(RuleEvaluationException.class)
+    public ResponseEntity<ApiErrorResponse> handleRuleEvaluation(RuleEvaluationException ex, HttpServletRequest request) {
+        log.error("Rule evaluation failed loanId={} rule={}", ex.getLoanId(), ex.getRuleName(), ex);
+        return buildResponse(
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                "RULE_EVALUATION_FAILED",
+                "Unable to evaluate borrower safely for rule " + ex.getRuleName(),
+                request.getRequestURI());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
-        String msg = ex.getBindingResult().getFieldError() != null 
-            ? ex.getBindingResult().getFieldError().getField() + " " + ex.getBindingResult().getFieldError().getDefaultMessage()
-            : "Validation failed";
+        String msg = ex.getBindingResult().getFieldError() != null
+                ? ex.getBindingResult().getFieldError().getField() + " " + ex.getBindingResult().getFieldError().getDefaultMessage()
+                : "Validation failed";
         return buildResponse(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", msg, request.getRequestURI());
     }
 
@@ -46,14 +56,14 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ApiErrorResponse> buildResponse(HttpStatus status, String errorCode, String message, String path) {
         return ResponseEntity.status(status).body(
-            ApiErrorResponse.builder()
-                .timestamp(OffsetDateTime.now())
-                .status(status.value())
-                .error(errorCode)
-                .message(message)
-                .path(path)
-                .correlationId(CorrelationIdUtil.getCorrelationId())
-                .build()
+                ApiErrorResponse.builder()
+                        .timestamp(OffsetDateTime.now())
+                        .status(status.value())
+                        .error(errorCode)
+                        .message(message)
+                        .path(path)
+                        .correlationId(CorrelationIdUtil.getCorrelationId())
+                        .build()
         );
     }
 }
