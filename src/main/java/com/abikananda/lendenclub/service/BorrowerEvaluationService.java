@@ -77,6 +77,33 @@ public class BorrowerEvaluationService {
                 ? droolsService.evaluate(fact, req.getSessionId())
                 : droolsService.evaluateSpecificRule(fact, req.getSessionId(), ruleName);
 
+        String responseRule = result.getRuleName();
+        if (ruleName != null && responseRule != null) {
+            responseRule = LendingRule.fromRuleName(responseRule).name();
+        }
+
+        // Specific-rule evaluation intentionally returns a nullable decision when the selected
+        // rule does not match. Preserve that contract and avoid inserting nulls into the
+        // non-null borrower_evaluation decision/risk/amount columns.
+        if (result.getDecision() == null) {
+            auditService.logEvent(
+                    "BORROWER_EVALUATION_NO_MATCH",
+                    req.getSessionId(),
+                    req.getLoanId(),
+                    "RequestedRule=" + ruleName + " Engine=" + engineVersion);
+
+            return BorrowerEvaluateResponse.builder()
+                    .loanId(req.getLoanId())
+                    .sessionId(req.getSessionId())
+                    .decision(null)
+                    .riskLevel(result.getRiskLevel())
+                    .investmentAmount(result.getInvestmentAmount())
+                    .rule(responseRule)
+                    .reason(result.getReason())
+                    .evaluationId(null)
+                    .build();
+        }
+
         var aiResult = aiRiskService.evaluate(fact);
 
         BorrowerEvaluation evaluation = BorrowerEvaluation.builder()
@@ -99,11 +126,6 @@ public class BorrowerEvaluationService {
                 req.getSessionId(),
                 req.getLoanId(),
                 "Decision=" + result.getDecision() + " Rule=" + result.getRuleName() + " Engine=" + engineVersion);
-
-        String responseRule = result.getRuleName();
-        if (ruleName != null && responseRule != null) {
-            responseRule = LendingRule.fromRuleName(responseRule).name();
-        }
 
         return BorrowerEvaluateResponse.builder()
                 .loanId(req.getLoanId())
