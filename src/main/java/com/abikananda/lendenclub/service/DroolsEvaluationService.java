@@ -2,18 +2,13 @@ package com.abikananda.lendenclub.service;
 
 import com.abikananda.lendenclub.domain.BorrowerFact;
 import com.abikananda.lendenclub.domain.EvaluationResult;
-import org.kie.api.KieServices;
-import org.kie.api.command.Command;
+import com.abikananda.lendenclub.exception.RuleEvaluationException;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
-import org.kie.api.runtime.StatelessKieSession;
 import org.kie.api.runtime.rule.AgendaFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Service
 public class DroolsEvaluationService {
@@ -38,14 +33,14 @@ public class DroolsEvaluationService {
             log.info("sessionId={} loanId={} Drools evaluation completed. Decision={} Rule={}",
                     sessionId, fact.getLoanId(), result.getDecision(), result.getRuleName());
             return result;
+        } catch (RuntimeException ex) {
+            log.error("sessionId={} loanId={} Drools evaluation failed", sessionId, fact.getLoanId(), ex);
+            throw new RuleEvaluationException(fact.getLoanId(), "ALL_RULES", ex);
         } finally {
             kieSession.dispose();
         }
     }
 
-    /**
-     * Evaluates a borrower against a single predefined rule by its exact name.
-     */
     public EvaluationResult evaluateSpecificRule(BorrowerFact fact, String sessionId, String ruleName) {
         log.info("sessionId={} loanId={} Evaluating specific rule={}", sessionId, fact.getLoanId(), ruleName);
 
@@ -57,17 +52,18 @@ public class DroolsEvaluationService {
             kieSession.insert(fact);
             kieSession.insert(result);
 
-            // Filter to execute ONLY the specified rule
             AgendaFilter ruleFilter = match -> match.getRule().getName().equals(ruleName);
             kieSession.fireAllRules(ruleFilter);
 
             log.info("sessionId={} loanId={} Specific rule evaluation completed. Decision={}",
                     sessionId, fact.getLoanId(), result.getDecision());
-
             return result;
+        } catch (RuntimeException ex) {
+            log.error("sessionId={} loanId={} rule={} Drools rule evaluation failed",
+                    sessionId, fact.getLoanId(), ruleName, ex);
+            throw new RuleEvaluationException(fact.getLoanId(), ruleName, ex);
         } finally {
             kieSession.dispose();
         }
     }
-
 }

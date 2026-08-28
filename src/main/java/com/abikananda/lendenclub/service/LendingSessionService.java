@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -27,7 +28,7 @@ public class LendingSessionService {
 
     @Transactional
     public LendingSession createSession(Lender lender) {
-        String sessionId = "LS-" + UUID.randomUUID().toString();
+        String sessionId = "LS-" + UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now();
 
         LendingSession session = LendingSession.builder()
@@ -42,17 +43,25 @@ public class LendingSessionService {
         return sessionRepository.save(session);
     }
 
-    @Transactional
-    public LendingSession validateAndTouchSession(String sessionId) {
+    @Transactional(readOnly = true)
+    public LendingSession requireActiveSession(String sessionId) {
         LendingSession session = sessionRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> new InvalidSessionException("Session not found: " + sessionId));
+        assertActive(session);
+        return session;
+    }
 
-        if (session.getStatus() == LendingSessionStatus.COMPLETED ||
-            session.getStatus() == LendingSessionStatus.CANCELLED ||
-            session.getStatus() == LendingSessionStatus.EXPIRED ||
-            session.getStatus() == LendingSessionStatus.FAILED) {
-            throw new InvalidSessionException("Session is not active. Current status: " + session.getStatus());
-        }
+    @Transactional
+    public LendingSession requireActiveSessionForUpdate(String sessionId) {
+        LendingSession session = sessionRepository.findBySessionIdForUpdate(sessionId)
+                .orElseThrow(() -> new InvalidSessionException("Session not found: " + sessionId));
+        assertActive(session);
+        return session;
+    }
+
+    @Transactional
+    public LendingSession validateAndTouchSession(String sessionId) {
+        LendingSession session = requireActiveSessionForUpdate(sessionId);
 
         if (session.getStatus() == LendingSessionStatus.STARTED) {
             session.setStatus(LendingSessionStatus.ACTIVE);
@@ -65,10 +74,7 @@ public class LendingSessionService {
     }
 
     @Transactional
-    public void recordInvestmentResult(String sessionId, boolean success, BigDecimal amount) {
-        LendingSession session = sessionRepository.findBySessionId(sessionId)
-                .orElseThrow(() -> new InvalidSessionException("Session not found: " + sessionId));
-
+    public void recordInvestmentResult(LendingSession session, boolean success, BigDecimal amount) {
         session.setTotalInvestments(session.getTotalInvestments() + 1);
         if (success) {
             session.setSuccessfulInvestments(session.getSuccessfulInvestments() + 1);
@@ -81,8 +87,14 @@ public class LendingSessionService {
     }
 
     @Transactional
+    public void recordInvestmentResult(String sessionId, boolean success, BigDecimal amount) {
+        LendingSession session = requireActiveSessionForUpdate(sessionId);
+        recordInvestmentResult(session, success, amount);
+    }
+
+    @Transactional
     public LendingSessionResponse completeSession(String sessionId) {
-        LendingSession session = sessionRepository.findBySessionId(sessionId)
+        LendingSession session = sessionRepository.findBySessionIdForUpdate(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
 
         session.setStatus(LendingSessionStatus.COMPLETED);
@@ -95,7 +107,7 @@ public class LendingSessionService {
 
     @Transactional
     public LendingSessionResponse cancelSession(String sessionId) {
-        LendingSession session = sessionRepository.findBySessionId(sessionId)
+        LendingSession session = sessionRepository.findBySessionIdForUpdate(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
 
         session.setStatus(LendingSessionStatus.CANCELLED);
@@ -106,10 +118,20 @@ public class LendingSessionService {
         return mapToResponse(session);
     }
 
+    @Transactional(readOnly = true)
     public LendingSessionResponse getSessionSummary(String sessionId) {
         LendingSession session = sessionRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found: " + sessionId));
         return mapToResponse(session);
+    }
+
+    private void assertActive(LendingSession session) {
+        if (session.getStatus() == LendingSessionStatus.COMPLETED ||
+                session.getStatus() == LendingSessionStatus.CANCELLED ||
+                session.getStatus() == LendingSessionStatus.EXPIRED ||
+                session.getStatus() == LendingSessionStatus.FAILED) {
+            throw new InvalidSessionException("Session is not active. Current status: " + session.getStatus());
+        }
     }
 
     private LendingSessionResponse mapToResponse(LendingSession session) {
