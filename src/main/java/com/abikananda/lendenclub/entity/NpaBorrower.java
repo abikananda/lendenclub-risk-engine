@@ -19,7 +19,7 @@ public class NpaBorrower {
     @Column(name = "borrower_name", nullable = false, length = 160)
     private String borrowerName;
 
-    @Column(name = "normalized_name", nullable = false, unique = true, length = 160)
+    @Column(name = "normalized_name", nullable = false, unique = true, length = 160, insertable = false, updatable = false)
     private String normalizedName;
 
     @Column(nullable = false)
