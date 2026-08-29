@@ -1,5 +1,6 @@
 package com.abikananda.lendenclub.service;
 
+import com.abikananda.lendenclub.domain.LendingRule;
 import com.abikananda.lendenclub.domain.LendingSessionStatus;
 import com.abikananda.lendenclub.dto.LendingSessionResponse;
 import com.abikananda.lendenclub.entity.Lender;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -28,18 +30,26 @@ public class LendingSessionService {
 
     @Transactional
     public LendingSession createSession(Lender lender) {
+        return createSession(lender, lender.getWalletAmount(), lender.getLendingRules());
+    }
+
+    @Transactional
+    public LendingSession createSession(Lender lender, BigDecimal configuredInvestmentAmount, List<LendingRule> configuredLendingRules) {
         String sessionId = "LS-" + UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now();
 
         LendingSession session = LendingSession.builder()
                 .sessionId(sessionId)
                 .lender(lender)
+                .configuredInvestmentAmount(configuredInvestmentAmount)
+                .configuredLendingRules(configuredLendingRules == null ? List.of() : List.copyOf(configuredLendingRules))
                 .status(LendingSessionStatus.STARTED)
                 .startedAt(now)
                 .lastActivityAt(now)
                 .build();
 
-        log.info("Creating new lending session sessionId={} for lenderId={}", sessionId, lender.getExternalLenderId());
+        log.info("Creating lending session sessionId={} lenderId={} configuredAmount={} configuredRules={}",
+                sessionId, lender.getExternalLenderId(), configuredInvestmentAmount, configuredLendingRules);
         return sessionRepository.save(session);
     }
 
