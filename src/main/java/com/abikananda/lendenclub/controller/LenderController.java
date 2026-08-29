@@ -20,8 +20,9 @@ public class LenderController {
     }
 
     @GetMapping("/data")
-    public ResponseEntity<LenderResponse> getLenderData() {
-        return ResponseEntity.ok(lenderService.getLenderAndStartSession());
+    public ResponseEntity<LenderResponse> getLenderData(
+            @RequestParam(name = "lenderId", required = false) String lenderId) {
+        return ResponseEntity.ok(lenderService.getLenderAndStartSession(lenderId));
     }
 
     @PostMapping("/session/{sessionId}/complete")
