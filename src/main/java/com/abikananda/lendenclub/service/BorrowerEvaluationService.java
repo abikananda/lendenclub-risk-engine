@@ -148,10 +148,10 @@ public class BorrowerEvaluationService {
                     .age(req.getAge())
                     .borrowerType(req.getBorrowerType())
                     .repeated(req.getRepeated())
-                    .riskCategory(req.getRiskCategory())
-                    .remainingAmount(req.getRemainingAmount())
+                    .loanType(req.getLoanType())
                     .repaymentFrequency(req.getRepaymentFrequency())
-                    .panelDetails(req.getPanelDetails() == null ? null : objectMapper.writeValueAsString(req.getPanelDetails()))
+                    .gender(req.getGender())
+                    .riskCategory(req.getRiskCategory())
                     .rawPayload(objectMapper.writeValueAsString(req))
                     .build();
             snapshotRepository.save(snapshot);
