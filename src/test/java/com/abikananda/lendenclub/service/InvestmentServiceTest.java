@@ -19,6 +19,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -89,7 +91,7 @@ class InvestmentServiceTest {
 
         assertEquals(99L, response.getId());
         verify(investmentRepository, never()).save(any());
-        verify(sessionService, never()).recordInvestmentResult(any(), any(Boolean.class), any(BigDecimal.class));
+        verify(sessionService, never()).recordInvestmentResult(isA(LendingSession.class), anyBoolean(), isA(BigDecimal.class));
         verify(auditService, never()).logEvent(any(), any(), any(), any());
     }
 
@@ -111,7 +113,7 @@ class InvestmentServiceTest {
                 () -> service.recordStatus(request("SESSION-2", "EXT-1", InvestmentStatus.SUCCESS)));
 
         verify(investmentRepository, never()).save(any());
-        verify(sessionService, never()).recordInvestmentResult(any(), any(Boolean.class), any(BigDecimal.class));
+        verify(sessionService, never()).recordInvestmentResult(isA(LendingSession.class), anyBoolean(), isA(BigDecimal.class));
     }
 
     private InvestmentStatusRequest request(String sessionId, String externalId, InvestmentStatus status) {
