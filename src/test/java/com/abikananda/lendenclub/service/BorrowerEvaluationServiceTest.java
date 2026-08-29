@@ -58,7 +58,7 @@ class BorrowerEvaluationServiceTest {
     @Test
     void noMatchStillPersistsCompleteBorrowerSnapshotButDoesNotRunAiOrSaveEvaluation() {
         BorrowerEvaluateRequest request = request();
-        when(droolsService.evaluateSpecificRule(any(), eq("Bulk Lenders")))
+        when(droolsService.evaluateSpecificRule(any(), eq("SESSION-1"), eq("Bulk Lenders")))
                 .thenReturn(EvaluationResult.builder()
                         .decision(null)
                         .riskLevel(RiskLevel.HIGH)
