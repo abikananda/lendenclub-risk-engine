@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 public interface InvestmentConfigRepository extends JpaRepository<InvestmentConfig, Long> {
-    Optional<InvestmentConfig> findByLenderIdAndEnabledTrue(Long lenderId);
+    Optional<InvestmentConfig> findByLender_IdAndEnabledTrue(Long lenderId);
 }
