@@ -30,7 +30,7 @@ class LenderServiceInvestmentConfigTest {
     @Mock private LendingSessionService sessionService;
 
     @Test
-    void startsRequestedLenderUsingInvestmentConfigSnapshot() {
+    void startsRequestedLenderByUsernameUsingInvestmentConfigSnapshot() {
         Lender lender = Lender.builder()
                 .id(10L)
                 .externalLenderId("LENDER-A")
@@ -63,15 +63,16 @@ class LenderServiceInvestmentConfigTest {
                 .lastActivityAt(OffsetDateTime.now())
                 .build();
 
-        when(lenderRepository.findByExternalLenderId("LENDER-A")).thenReturn(Optional.of(lender));
+        when(lenderRepository.findByUsername("lender-a")).thenReturn(Optional.of(lender));
         when(investmentConfigRepository.findByLender_IdAndEnabledTrue(10L)).thenReturn(Optional.of(config));
         when(sessionService.createSession(lender, config.getInvestmentAmount(), configuredRules)).thenReturn(session);
 
         LenderService service = new LenderService(lenderRepository, investmentConfigRepository, sessionService);
-        LenderResponse response = service.getLenderAndStartSession("LENDER-A");
+        LenderResponse response = service.getLenderAndStartSession("lender-a");
 
         assertEquals("LS-TEST-A", response.getSessionId());
         assertEquals("LENDER-A", response.getLender().getLenderId());
+        assertEquals("lender-a", response.getLender().getUsername());
         assertEquals(new BigDecimal("10000.00"), response.getLender().getWalletAmount());
         assertEquals(configuredRules, response.getLender().getLendingRules());
         verify(sessionService).createSession(lender, new BigDecimal("10000.00"), configuredRules);
