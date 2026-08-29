@@ -1,12 +1,16 @@
 package com.abikananda.lendenclub.entity;
 
+import com.abikananda.lendenclub.domain.LendingRule;
+import com.abikananda.lendenclub.domain.LendingRuleListConverter;
 import com.abikananda.lendenclub.domain.LendingSessionStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "lending_session")
@@ -23,6 +27,13 @@ public class LendingSession {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lender_id", nullable = false)
     private Lender lender;
+
+    @Column(name = "configured_investment_amount", precision = 12, scale = 2)
+    private BigDecimal configuredInvestmentAmount;
+
+    @Convert(converter = LendingRuleListConverter.class)
+    @Column(name = "configured_lending_rules", length = 1000)
+    private List<LendingRule> configuredLendingRules;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
