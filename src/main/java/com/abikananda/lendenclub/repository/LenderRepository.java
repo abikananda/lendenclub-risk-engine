@@ -6,5 +6,6 @@ import java.util.Optional;
 
 public interface LenderRepository extends JpaRepository<Lender, Long> {
     Optional<Lender> findByExternalLenderId(String externalLenderId);
+    Optional<Lender> findByUsername(String username);
     Optional<Lender> findFirstByActiveTrue();
 }
