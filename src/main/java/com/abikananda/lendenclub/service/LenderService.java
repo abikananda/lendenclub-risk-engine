@@ -44,7 +44,7 @@ public class LenderService {
             throw new IllegalStateException("Lender is disabled: " + lender.getExternalLenderId());
         }
 
-        InvestmentConfig config = investmentConfigRepository.findByLenderIdAndEnabledTrue(lender.getId())
+        InvestmentConfig config = investmentConfigRepository.findByLender_IdAndEnabledTrue(lender.getId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No enabled investment config found for lender: " + lender.getExternalLenderId()));
 
