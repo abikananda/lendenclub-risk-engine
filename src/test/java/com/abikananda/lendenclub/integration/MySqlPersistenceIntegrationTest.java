@@ -5,6 +5,7 @@ import com.abikananda.lendenclub.domain.LendingDecision;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateResponse;
 import com.abikananda.lendenclub.dto.InvestmentStatusRequest;
+import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.entity.Lender;
 import com.abikananda.lendenclub.entity.LendingSession;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
@@ -109,6 +110,16 @@ class MySqlPersistenceIntegrationTest {
         assertEquals(0, evaluationRepository.findByLoanId("LOAN-EVAL-NO-MATCH").size());
         assertEquals(2, snapshotRepository.count());
 
+        BorrowerSnapshot persistedSnapshot = snapshotRepository.findAll().stream()
+                .filter(snapshot -> "LOAN-EVAL-MATCH".equals(snapshot.getLoanId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Integration Borrower", persistedSnapshot.getBorrowerName());
+        assertEquals("PERSONAL", persistedSnapshot.getLoanType());
+        assertEquals("MONTHLY", persistedSnapshot.getRepaymentFrequency());
+        assertEquals("FEMALE", persistedSnapshot.getGender());
+        assertEquals("LOW", persistedSnapshot.getRiskCategory());
+
         InvestmentStatusRequest request = InvestmentStatusRequest.builder()
                 .sessionId(session.getSessionId())
                 .loanId("LOAN-INTEGRATION-1")
@@ -144,6 +155,7 @@ class MySqlPersistenceIntegrationTest {
         return BorrowerEvaluateRequest.builder()
                 .sessionId(sessionId)
                 .loanId(loanId)
+                .borrowerName("Integration Borrower")
                 .creditScore(creditScore)
                 .lendenScore(lendenScore)
                 .income(new BigDecimal(income))
@@ -154,6 +166,10 @@ class MySqlPersistenceIntegrationTest {
                 .age(35)
                 .borrowerType("SALARIED")
                 .repeated(false)
+                .loanType("PERSONAL")
+                .repaymentFrequency("MONTHLY")
+                .gender("FEMALE")
+                .riskCategory("LOW")
                 .build();
     }
 }
