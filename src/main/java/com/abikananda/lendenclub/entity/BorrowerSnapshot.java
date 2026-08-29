@@ -18,6 +18,9 @@ public class BorrowerSnapshot {
     @Column(name = "loan_id", nullable = false, length = 64)
     private String loanId;
 
+    @Column(name = "borrower_name", length = 160)
+    private String borrowerName;
+
     @Column(name = "credit_score", nullable = false)
     private Integer creditScore;
 
@@ -47,6 +50,18 @@ public class BorrowerSnapshot {
 
     @Column(name = "repeated", nullable = false)
     private Boolean repeated;
+
+    @Column(name = "loan_type", length = 80)
+    private String loanType;
+
+    @Column(name = "repayment_frequency", length = 50)
+    private String repaymentFrequency;
+
+    @Column(name = "gender", length = 30)
+    private String gender;
+
+    @Column(name = "risk_category", length = 50)
+    private String riskCategory;
 
     @Column(name = "raw_payload", columnDefinition = "JSON")
     private String rawPayload;

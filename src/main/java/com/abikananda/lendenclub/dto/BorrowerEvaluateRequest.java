@@ -19,6 +19,8 @@ public class BorrowerEvaluateRequest {
     @NotBlank
     private String loanId;
 
+    private String borrowerName;
+
     @NotNull
     private Integer creditScore;
 
@@ -48,4 +50,9 @@ public class BorrowerEvaluateRequest {
 
     @NotNull
     private Boolean repeated;
+
+    private String loanType;
+    private String repaymentFrequency;
+    private String gender;
+    private String riskCategory;
 }
