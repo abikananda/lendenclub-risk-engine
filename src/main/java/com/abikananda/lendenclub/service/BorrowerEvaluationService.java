@@ -136,6 +136,7 @@ public class BorrowerEvaluationService {
         try {
             BorrowerSnapshot snapshot = BorrowerSnapshot.builder()
                     .loanId(req.getLoanId())
+                    .borrowerName(req.getBorrowerName())
                     .sessionId(req.getSessionId())
                     .creditScore(req.getCreditScore())
                     .lendenScore(req.getLendenScore())
@@ -147,6 +148,10 @@ public class BorrowerEvaluationService {
                     .age(req.getAge())
                     .borrowerType(req.getBorrowerType())
                     .repeated(req.getRepeated())
+                    .riskCategory(req.getRiskCategory())
+                    .remainingAmount(req.getRemainingAmount())
+                    .repaymentFrequency(req.getRepaymentFrequency())
+                    .panelDetails(req.getPanelDetails() == null ? null : objectMapper.writeValueAsString(req.getPanelDetails()))
                     .rawPayload(objectMapper.writeValueAsString(req))
                     .build();
             snapshotRepository.save(snapshot);
