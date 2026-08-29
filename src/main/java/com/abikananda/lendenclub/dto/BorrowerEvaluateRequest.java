@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
+import java.util.Map;
 
 @Data
 @Builder
@@ -18,6 +19,8 @@ public class BorrowerEvaluateRequest {
 
     @NotBlank
     private String loanId;
+
+    private String borrowerName;
 
     @NotNull
     private Integer creditScore;
@@ -48,4 +51,9 @@ public class BorrowerEvaluateRequest {
 
     @NotNull
     private Boolean repeated;
+
+    private String riskCategory;
+    private BigDecimal remainingAmount;
+    private String repaymentFrequency;
+    private Map<String, String> panelDetails;
 }
