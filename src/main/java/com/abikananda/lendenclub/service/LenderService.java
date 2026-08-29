@@ -33,26 +33,26 @@ public class LenderService {
     }
 
     @Transactional
-    public LenderResponse getLenderAndStartSession(String externalLenderId) {
-        Lender lender = externalLenderId == null || externalLenderId.isBlank()
+    public LenderResponse getLenderAndStartSession(String username) {
+        Lender lender = username == null || username.isBlank()
                 ? lenderRepository.findFirstByActiveTrue()
                     .orElseThrow(() -> new ResourceNotFoundException("No active lender found"))
-                : lenderRepository.findByExternalLenderId(externalLenderId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Lender not found: " + externalLenderId));
+                : lenderRepository.findByUsername(username)
+                    .orElseThrow(() -> new ResourceNotFoundException("Lender not found for username: " + username));
 
         if (!Boolean.TRUE.equals(lender.getActive())) {
-            throw new IllegalStateException("Lender is disabled: " + lender.getExternalLenderId());
+            throw new IllegalStateException("Lender is disabled: " + lender.getUsername());
         }
 
         InvestmentConfig config = investmentConfigRepository.findByLender_IdAndEnabledTrue(lender.getId())
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "No enabled investment config found for lender: " + lender.getExternalLenderId()));
+                        "No enabled investment config found for lender: " + lender.getUsername()));
 
         if (config.getInvestmentAmount() == null || config.getInvestmentAmount().signum() <= 0) {
-            throw new IllegalStateException("Investment amount must be greater than zero for lender: " + lender.getExternalLenderId());
+            throw new IllegalStateException("Investment amount must be greater than zero for lender: " + lender.getUsername());
         }
         if (config.getLendingRules() == null || config.getLendingRules().isEmpty()) {
-            throw new IllegalStateException("At least one lending rule is required for lender: " + lender.getExternalLenderId());
+            throw new IllegalStateException("At least one lending rule is required for lender: " + lender.getUsername());
         }
 
         LendingSession session = sessionService.createSession(
