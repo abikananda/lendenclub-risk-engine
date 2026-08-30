@@ -20,7 +20,7 @@ public class BorrowerProfile {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "public_id", nullable = false, unique = true, length = 36)
+    @Column(name = "public_id", nullable = false, unique = true, length = 14)
     private String publicId;
 
     @Column(name = "display_name", nullable = false, length = 160)
