@@ -76,12 +76,15 @@ public class BorrowerIdentityService {
     }
 
     @Transactional
-    public void recordSuccessfulInvestment(BorrowerProfile profile, BigDecimal amount) {
-        if (profile == null || amount == null) return;
-        profile.setTotalLent(profile.getTotalLent().add(amount));
-        profile.setSuccessfulInvestmentCount(profile.getSuccessfulInvestmentCount() + 1);
-        profile.setLastLentAt(OffsetDateTime.now(ZoneOffset.UTC));
-        repository.save(profile);
+    public BorrowerProfile recordSuccessfulInvestment(BorrowerProfile profile, BigDecimal amount) {
+        if (profile == null || profile.getId() == null || amount == null) return profile;
+
+        BorrowerProfile locked = repository.findByIdForUpdate(profile.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Borrower profile not found: " + profile.getId()));
+        locked.setTotalLent(locked.getTotalLent().add(amount));
+        locked.setSuccessfulInvestmentCount(locked.getSuccessfulInvestmentCount() + 1);
+        locked.setLastLentAt(OffsetDateTime.now(ZoneOffset.UTC));
+        return repository.save(locked);
     }
 
     @Transactional(readOnly = true)
