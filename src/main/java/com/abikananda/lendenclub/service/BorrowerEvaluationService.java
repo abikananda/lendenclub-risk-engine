@@ -139,7 +139,7 @@ public class BorrowerEvaluationService {
     private void saveSnapshot(BorrowerEvaluateRequest req) {
         try {
             BorrowerProfile profile = borrowerIdentityService.resolveOrCreate(
-                    req.getBorrowerName(), req.getGender(), req.getAge());
+                    req.getBorrowerName(), req.getGender(), req.getBorrowerType(), req.getAge());
 
             BorrowerSnapshot snapshot = BorrowerSnapshot.builder()
                     .loanId(req.getLoanId())
