@@ -6,6 +6,7 @@ import com.abikananda.lendenclub.repository.BorrowerProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -28,7 +29,7 @@ public class BorrowerIdentityService {
         this.repository = repository;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public BorrowerProfile resolveOrCreate(String borrowerName, String gender, Integer age) {
         String normalizedName = normalizeName(borrowerName);
         String normalizedGender = normalizeOptional(gender);
