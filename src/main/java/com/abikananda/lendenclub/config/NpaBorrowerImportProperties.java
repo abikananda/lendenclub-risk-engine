@@ -12,5 +12,4 @@ import org.springframework.stereotype.Component;
 public class NpaBorrowerImportProperties {
     private boolean enabled;
     private boolean runOnStartup;
-    private String query;
 }
