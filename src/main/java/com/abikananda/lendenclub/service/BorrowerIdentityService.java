@@ -1,6 +1,7 @@
 package com.abikananda.lendenclub.service;
 
 import com.abikananda.lendenclub.entity.BorrowerProfile;
+import com.abikananda.lendenclub.exception.ResourceNotFoundException;
 import com.abikananda.lendenclub.repository.BorrowerProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,6 +74,17 @@ public class BorrowerIdentityService {
         profile.setSuccessfulInvestmentCount(profile.getSuccessfulInvestmentCount() + 1);
         profile.setLastLentAt(OffsetDateTime.now(ZoneOffset.UTC));
         repository.save(profile);
+    }
+
+    @Transactional(readOnly = true)
+    public BorrowerProfile getByPublicId(String publicId) {
+        return repository.findByPublicId(publicId)
+                .orElseThrow(() -> new ResourceNotFoundException("Borrower profile not found: " + publicId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<BorrowerProfile> findByName(String borrowerName) {
+        return repository.findByNormalizedName(normalizeName(borrowerName));
     }
 
     static String normalizeName(String value) {
