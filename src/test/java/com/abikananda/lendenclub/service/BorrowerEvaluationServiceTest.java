@@ -67,10 +67,11 @@ class BorrowerEvaluationServiceTest {
                 .publicId("profile-1")
                 .displayName("Test Borrower")
                 .normalizedName("test borrower")
+                .borrowerTypeNormalized("salaried")
                 .totalLent(BigDecimal.ZERO)
                 .successfulInvestmentCount(0L)
                 .build();
-        when(borrowerIdentityService.resolveOrCreate("Test Borrower", "FEMALE", 35)).thenReturn(profile);
+        when(borrowerIdentityService.resolveOrCreate("Test Borrower", "FEMALE", "SALARIED", 35)).thenReturn(profile);
         when(droolsService.evaluateSpecificRule(any(), eq("SESSION-1"), eq("Bulk Lenders")))
                 .thenReturn(EvaluationResult.builder()
                         .decision(null)
