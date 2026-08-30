@@ -25,8 +25,7 @@ public class NpaBorrowerImportUtility {
     static final String MANUAL_LENDING_NPA_QUERY = """
             SELECT DISTINCT particular
             FROM manual_lending_investment
-            WHERE isnpa = true
-              AND particular IS NOT NULL
+            WHERE isnpa=? AND particular IS NOT NULL
             """;
 
     static final String DEFAULT_BORROWERS_QUERY = """
@@ -47,7 +46,10 @@ public class NpaBorrowerImportUtility {
 
     @Transactional
     public ImportResult sync() {
-        List<String> manualLendingNames = sourceJdbcTemplate.queryForList(MANUAL_LENDING_NPA_QUERY, String.class);
+        List<String> manualLendingNames = sourceJdbcTemplate.queryForList(
+                MANUAL_LENDING_NPA_QUERY,
+                String.class,
+                true);
         List<String> defaultBorrowerNames = sourceJdbcTemplate.queryForList(DEFAULT_BORROWERS_QUERY, String.class);
 
         List<String> sourceNames = new ArrayList<>(manualLendingNames.size() + defaultBorrowerNames.size());
