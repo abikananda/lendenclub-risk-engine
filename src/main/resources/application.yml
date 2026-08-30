@@ -40,6 +40,16 @@ risk-engine:
     enabled: ${AI_ENABLED:false}
     provider: ${AI_PROVIDER:noop}
 
+npa-import:
+  enabled: ${NPA_IMPORT_ENABLED:false}
+  run-on-startup: ${NPA_IMPORT_RUN_ON_STARTUP:false}
+  query: ${NPA_IMPORT_QUERY:}
+  datasource:
+    url: ${NPA_SOURCE_DB_URL:}
+    username: ${NPA_SOURCE_DB_USERNAME:}
+    password: ${NPA_SOURCE_DB_PASSWORD:}
+    driver-class-name: ${NPA_SOURCE_DB_DRIVER:com.mysql.cj.jdbc.Driver}
+
 otp:
   max-retries: ${OTP_MAX_RETRIES:5}
   retry-delay-ms: ${OTP_RETRY_DELAY_MS:2000}
