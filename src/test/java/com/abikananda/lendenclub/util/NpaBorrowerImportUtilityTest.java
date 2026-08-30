@@ -22,7 +22,7 @@ class NpaBorrowerImportUtilityTest {
         JdbcTemplate source = mock(JdbcTemplate.class);
         NpaBorrowerRepository repository = mock(NpaBorrowerRepository.class);
 
-        when(source.queryForList(NpaBorrowerImportUtility.MANUAL_LENDING_NPA_QUERY, String.class))
+        when(source.queryForList(NpaBorrowerImportUtility.MANUAL_LENDING_NPA_QUERY, String.class, true))
                 .thenReturn(List.of(" Alice ", "BOB"));
         when(source.queryForList(NpaBorrowerImportUtility.DEFAULT_BORROWERS_QUERY, String.class))
                 .thenReturn(List.of("alice", "  "));
@@ -50,5 +50,7 @@ class NpaBorrowerImportUtilityTest {
         assertEquals(true, bob.getActive());
         verify(repository).save(bob);
         verify(repository, times(2)).save(any(NpaBorrower.class));
+        verify(source).queryForList(NpaBorrowerImportUtility.MANUAL_LENDING_NPA_QUERY, String.class, true);
+        verify(source).queryForList(NpaBorrowerImportUtility.DEFAULT_BORROWERS_QUERY, String.class);
     }
 }
