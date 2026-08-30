@@ -16,7 +16,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.UUID;
 
 @Service
 public class BorrowerIdentityService {
@@ -24,9 +23,12 @@ public class BorrowerIdentityService {
     private static final Logger log = LoggerFactory.getLogger(BorrowerIdentityService.class);
 
     private final BorrowerProfileRepository repository;
+    private final BorrowerProfileCreator profileCreator;
 
-    public BorrowerIdentityService(BorrowerProfileRepository repository) {
+    public BorrowerIdentityService(BorrowerProfileRepository repository,
+                                   BorrowerProfileCreator profileCreator) {
         this.repository = repository;
+        this.profileCreator = profileCreator;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -61,8 +63,8 @@ public class BorrowerIdentityService {
                     borrowerName, normalizedGender, normalizedBorrowerType, estimatedBirthYear, candidates.size());
         }
 
-        BorrowerProfile created = BorrowerProfile.builder()
-                .publicId(UUID.randomUUID().toString())
+        return profileCreator.create(publicId -> BorrowerProfile.builder()
+                .publicId(publicId)
                 .displayName(borrowerName.trim())
                 .normalizedName(normalizedName)
                 .genderNormalized(normalizedGender)
@@ -71,8 +73,7 @@ public class BorrowerIdentityService {
                 .totalLent(BigDecimal.ZERO)
                 .successfulInvestmentCount(0L)
                 .lastSeenAt(now)
-                .build();
-        return repository.save(created);
+                .build());
     }
 
     @Transactional
