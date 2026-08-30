@@ -56,7 +56,9 @@ class BorrowerEvaluationServiceTest {
                 borrowerIdentityService,
                 auditService,
                 new ObjectMapper(),
-                "test-engine");
+                "test-engine",
+                "test-rule-version",
+                "test-ruleset-version");
     }
 
     @Test
@@ -84,6 +86,9 @@ class BorrowerEvaluationServiceTest {
 
         assertNull(response.getDecision());
         assertNull(response.getEvaluationId());
+        assertEquals("test-rule-version", response.getRuleVersion());
+        assertEquals("test-ruleset-version", response.getRulesetVersion());
+        assertEquals("test-engine", response.getEngineVersion());
         verify(sessionService).validateAndTouchSession("SESSION-1");
 
         ArgumentCaptor<BorrowerSnapshot> snapshotCaptor = ArgumentCaptor.forClass(BorrowerSnapshot.class);
