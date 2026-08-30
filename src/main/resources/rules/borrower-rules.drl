@@ -5,7 +5,6 @@ import com.abikananda.lendenclub.domain.EvaluationResult;
 import com.abikananda.lendenclub.domain.LendingDecision;
 import com.abikananda.lendenclub.domain.RiskLevel;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 global com.abikananda.lendenclub.domain.EvaluationResult evaluationResult;
 
@@ -23,11 +22,6 @@ function boolean isEmiTooHigh(BigDecimal emi, BigDecimal income) {
     return emi.compareTo(income.multiply(new BigDecimal("0.20"))) > 0;
 }
 
-function boolean isMonthlyPaymentAcceptable(BigDecimal loanAmount, int tenure, BigDecimal income) {
-    BigDecimal monthlyPayment = loanAmount.divide(new BigDecimal(tenure), 2, RoundingMode.HALF_UP);
-    return monthlyPayment.compareTo(income.multiply(new BigDecimal("0.30"))) <= 0;
-}
-
 function boolean isRatioAtMost(BigDecimal numerator, BigDecimal denominator, BigDecimal maxRatio) {
     if (numerator == null || denominator == null || maxRatio == null || denominator.signum() <= 0) {
         return false;
@@ -42,6 +36,15 @@ function boolean isMonthlyPaymentRatioAtMost(BigDecimal loanAmount, int tenure, 
     return loanAmount.compareTo(
             income.multiply(maxRatio).multiply(BigDecimal.valueOf(tenure))
     ) <= 0;
+}
+
+function boolean isMonthlyResidualAtLeast(BigDecimal loanAmount, int tenure, BigDecimal income, BigDecimal minResidual) {
+    if (loanAmount == null || income == null || minResidual == null || tenure <= 0) {
+        return false;
+    }
+    return income.multiply(BigDecimal.valueOf(tenure))
+            .subtract(loanAmount)
+            .compareTo(minResidual.multiply(BigDecimal.valueOf(tenure))) >= 0;
 }
 
 rule "Reject - Low Credit Score"
@@ -85,53 +88,362 @@ rule "Reject - EMI Too High"
         evaluationResult.setInvestmentAmount(BigDecimal.ZERO);
 end
 
+/**********************************************************************
+ * Investment rules below are synchronized from Selenium
+ * src/main/resources/rules/premium-rules.drl.
+ * Conditions and lending amounts intentionally match that source exactly.
+ **********************************************************************/
+
+rule "Repeated Lenders - Low Risk"
+when
+    $b : BorrowerFact(
+        repeated == true,
+        borrowerType == "SALARIED",
+        creditScore >= 730,
+        lendenScore >= 770,
+        income >= new BigDecimal("80000"),
+        interestRate >= new BigDecimal("18") && interestRate <= new BigDecimal("48"),
+        age >= 25 && age <= 55,
+        loanAmount <= new BigDecimal("30000"),
+        tenure >= 1 && tenure <= 4,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.30"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.20")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.LOW);
+    evaluationResult.setRuleName("Repeated Lenders - Low Risk");
+    evaluationResult.setRuleCode("REPEATED_LENDERS_LOW_RISK");
+    evaluationResult.setReason("Matched Selenium rule: Repeated Lenders - Low Risk");
+    evaluationResult.setInvestmentAmount(new BigDecimal("4000.00"));
+end
+
+rule "Repeated Lenders - Medium Risk"
+when
+    $b : BorrowerFact(
+        repeated == true,
+        borrowerType == "SALARIED",
+        creditScore >= 700,
+        lendenScore >= 750,
+        income >= new BigDecimal("50000"),
+        interestRate >= new BigDecimal("18") && interestRate <= new BigDecimal("48"),
+        age >= 20 && age <= 55,
+        loanAmount <= new BigDecimal("50000"),
+        tenure >= 1 && tenure <= 6,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.40"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.20")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.MEDIUM);
+    evaluationResult.setRuleName("Repeated Lenders - Medium Risk");
+    evaluationResult.setRuleCode("REPEATED_LENDERS_MEDIUM_RISK");
+    evaluationResult.setReason("Matched Selenium rule: Repeated Lenders - Medium Risk");
+    evaluationResult.setInvestmentAmount(new BigDecimal("2000.00"));
+end
+
 rule "Repeated Lenders - High Risk"
-    salience 50
-    when
-        $b : BorrowerFact(
-            repeated == true,
-            borrowerType == "SALARIED",
-            creditScore >= 600,
-            lendenScore >= 700,
-            income >= new BigDecimal("25000"),
-            interestRate >= new BigDecimal("18.0"),
-            age >= 18 && age <= 60,
-            loanAmount <= new BigDecimal("100000"),
-            tenure >= 1 && tenure <= 12,
-            eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.50"))),
-            eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.40")))
-        )
-    then
-        evaluationResult.setDecision(LendingDecision.INVEST);
-        evaluationResult.setRiskLevel(RiskLevel.HIGH);
-        evaluationResult.setRuleName("Repeated Lenders - High Risk");
-        evaluationResult.setRuleCode("INV_REPEATED_SALARIED");
-        evaluationResult.setReason("Meets criteria for high-risk repeated borrower");
-        evaluationResult.setInvestmentAmount(new BigDecimal("1000.00"));
+when
+    $b : BorrowerFact(
+        repeated == true,
+        borrowerType == "SALARIED",
+        creditScore >= 600,
+        lendenScore >= 700,
+        income >= new BigDecimal("25000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 18 && age <= 60,
+        loanAmount <= new BigDecimal("100000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.50"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.40")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.HIGH);
+    evaluationResult.setRuleName("Repeated Lenders - High Risk");
+    evaluationResult.setRuleCode("REPEATED_LENDERS_HIGH_RISK");
+    evaluationResult.setReason("Matched Selenium rule: Repeated Lenders - High Risk");
+    evaluationResult.setInvestmentAmount(new BigDecimal("1000.00"));
+end
+
+rule "Trusted Lenders - Low Risk"
+when
+    $b : BorrowerFact(
+        trusted == true,
+        borrowerType == "SALARIED",
+        creditScore >= 730,
+        lendenScore >= 750,
+        income >= new BigDecimal("80000"),
+        interestRate >= new BigDecimal("18") && interestRate <= new BigDecimal("48"),
+        age >= 25 && age <= 55,
+        loanAmount <= new BigDecimal("30000"),
+        tenure >= 1 && tenure <= 4,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.30"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.20")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.LOW);
+    evaluationResult.setRuleName("Trusted Lenders - Low Risk");
+    evaluationResult.setRuleCode("TRUSTED_LENDERS_LOW_RISK");
+    evaluationResult.setReason("Matched Selenium rule: Trusted Lenders - Low Risk");
+    evaluationResult.setInvestmentAmount(new BigDecimal("4000.00"));
+end
+
+rule "Trusted Lenders - Medium Risk"
+when
+    $b : BorrowerFact(
+        trusted == true,
+        borrowerType == "SALARIED",
+        creditScore >= 650,
+        lendenScore >= 750,
+        income >= new BigDecimal("50000"),
+        interestRate >= new BigDecimal("18") && interestRate <= new BigDecimal("48"),
+        age >= 23 && age <= 55,
+        loanAmount <= new BigDecimal("50000"),
+        tenure >= 1 && tenure <= 6,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.40"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.30")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.MEDIUM);
+    evaluationResult.setRuleName("Trusted Lenders - Medium Risk");
+    evaluationResult.setRuleCode("TRUSTED_LENDERS_MEDIUM_RISK");
+    evaluationResult.setReason("Matched Selenium rule: Trusted Lenders - Medium Risk");
+    evaluationResult.setInvestmentAmount(new BigDecimal("2000.00"));
+end
+
+rule "Trusted Lenders - High Risk"
+when
+    $b : BorrowerFact(
+        trusted == true,
+        borrowerType == "SALARIED",
+        creditScore >= 600,
+        lendenScore >= 700,
+        income >= new BigDecimal("25000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 20 && age <= 60,
+        loanAmount <= new BigDecimal("100000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.50"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.50")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.HIGH);
+    evaluationResult.setRuleName("Trusted Lenders - High Risk");
+    evaluationResult.setRuleCode("TRUSTED_LENDERS_HIGH_RISK");
+    evaluationResult.setReason("Matched Selenium rule: Trusted Lenders - High Risk");
+    evaluationResult.setInvestmentAmount(new BigDecimal("1000.00"));
+end
+
+rule "Good Lenders"
+when
+    $b : BorrowerFact(
+        borrowerType == "SALARIED",
+        creditScore >= 680,
+        lendenScore >= 750,
+        income >= new BigDecimal("30000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 23 && age <= 55,
+        loanAmount <= new BigDecimal("30000"),
+        tenure >= 1 && tenure <= 6,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.30"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.20")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.MEDIUM);
+    evaluationResult.setRuleName("Good Lenders");
+    evaluationResult.setRuleCode("GOOD_LENDERS");
+    evaluationResult.setReason("Matched Selenium rule: Good Lenders");
+    evaluationResult.setInvestmentAmount(new BigDecimal("1000.00"));
+end
+
+rule "Normal Lenders"
+when
+    $b : BorrowerFact(
+        borrowerType == "SALARIED",
+        creditScore >= 600,
+        lendenScore >= 720,
+        income >= new BigDecimal("25000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 20 && age <= 60,
+        loanAmount <= new BigDecimal("50000"),
+        tenure >= 1 && tenure <= 6,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.50"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.30")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.MEDIUM);
+    evaluationResult.setRuleName("Normal Lenders");
+    evaluationResult.setRuleCode("NORMAL_LENDERS");
+    evaluationResult.setReason("Matched Selenium rule: Normal Lenders");
+    evaluationResult.setInvestmentAmount(new BigDecimal("500.00"));
 end
 
 rule "Bulk Lenders"
-    salience 40
-    when
-        $b : BorrowerFact(
-            borrowerType == "SALARIED",
-            creditScore >= 550,
-            lendenScore >= 700,
-            income >= new BigDecimal("25000"),
-            interestRate >= new BigDecimal("18.0"),
-            age >= 20 && age <= 60,
-            loanAmount <= new BigDecimal("100000"),
-            tenure >= 1 && tenure <= 12,
-            eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.90"))),
-            eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.50")))
-        )
-    then
-        evaluationResult.setDecision(LendingDecision.INVEST);
-        evaluationResult.setRiskLevel(RiskLevel.HIGH);
-        evaluationResult.setRuleName("Bulk Lenders");
-        evaluationResult.setRuleCode("INV_BULK_SALARIED");
-        evaluationResult.setReason("Meets criteria for bulk lender with acceptable risk");
-        evaluationResult.setInvestmentAmount(new BigDecimal("250.00"));
+when
+    $b : BorrowerFact(
+        borrowerType == "SALARIED",
+        creditScore >= 550,
+        lendenScore >= 700,
+        income >= new BigDecimal("25000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 20 && age <= 60,
+        loanAmount <= new BigDecimal("100000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.90"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.50")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.HIGH);
+    evaluationResult.setRuleName("Bulk Lenders");
+    evaluationResult.setRuleCode("BULK_LENDERS");
+    evaluationResult.setReason("Matched Selenium rule: Bulk Lenders");
+    evaluationResult.setInvestmentAmount(new BigDecimal("250.00"));
+end
+
+rule "Repeated Business Lenders"
+when
+    $b : BorrowerFact(
+        repeated == true,
+        borrowerType == "SELF-EMPLOYED",
+        creditScore >= 700,
+        lendenScore >= 750,
+        income >= new BigDecimal("50000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 23 && age <= 60,
+        loanAmount <= new BigDecimal("100000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.40"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.30")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.MEDIUM);
+    evaluationResult.setRuleName("Repeated Business Lenders");
+    evaluationResult.setRuleCode("REPEATED_BUSINESS_LENDERS");
+    evaluationResult.setReason("Matched Selenium rule: Repeated Business Lenders");
+    evaluationResult.setInvestmentAmount(new BigDecimal("1000.00"));
+end
+
+rule "Good Business Lenders"
+when
+    $b : BorrowerFact(
+        borrowerType == "SELF-EMPLOYED",
+        creditScore >= 730,
+        lendenScore >= 770,
+        income >= new BigDecimal("50000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 23 && age <= 60,
+        loanAmount <= new BigDecimal("100000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.35"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.25")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.LOW);
+    evaluationResult.setRuleName("Good Business Lenders");
+    evaluationResult.setRuleCode("GOOD_BUSINESS_LENDERS");
+    evaluationResult.setReason("Matched Selenium rule: Good Business Lenders");
+    evaluationResult.setInvestmentAmount(new BigDecimal("500.00"));
+end
+
+rule "Bulk Business Lenders"
+when
+    $b : BorrowerFact(
+        borrowerType == "SELF-EMPLOYED",
+        creditScore >= 680,
+        lendenScore >= 720,
+        income >= new BigDecimal("30000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 23 && age <= 60,
+        loanAmount <= new BigDecimal("100000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.40"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.30")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.MEDIUM);
+    evaluationResult.setRuleName("Bulk Business Lenders");
+    evaluationResult.setRuleCode("BULK_BUSINESS_LENDERS");
+    evaluationResult.setReason("Matched Selenium rule: Bulk Business Lenders");
+    evaluationResult.setInvestmentAmount(new BigDecimal("250.00"));
+end
+
+rule "Filling Fast Lenders"
+when
+    $b : BorrowerFact(
+        borrowerType == "SALARIED",
+        creditScore >= 600,
+        lendenScore >= 700,
+        income >= new BigDecimal("25000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 18 && age <= 60,
+        loanAmount <= new BigDecimal("50000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.40"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.30"))),
+        eval(isMonthlyResidualAtLeast(loanAmount, tenure, income, new BigDecimal("15000")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.HIGH);
+    evaluationResult.setRuleName("Filling Fast Lenders");
+    evaluationResult.setRuleCode("FILLING_FAST_LENDERS");
+    evaluationResult.setReason("Matched Selenium rule: Filling Fast Lenders");
+    evaluationResult.setInvestmentAmount(new BigDecimal("250.00"));
+end
+
+rule "Daily Repayment Lenders"
+when
+    $b : BorrowerFact(
+        creditScore >= 730,
+        lendenScore >= 770,
+        income >= new BigDecimal("50000"),
+        interestRate >= new BigDecimal("15") && interestRate <= new BigDecimal("40"),
+        age >= 25 && age <= 60,
+        loanAmount <= new BigDecimal("100000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("1.0"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.20")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.MEDIUM);
+    evaluationResult.setRuleName("Daily Repayment Lenders");
+    evaluationResult.setRuleCode("DAILY_REPAYMENT_LENDERS");
+    evaluationResult.setReason("Matched Selenium rule: Daily Repayment Lenders");
+    evaluationResult.setInvestmentAmount(new BigDecimal("2000.00"));
+end
+
+rule "Monthly Repayment - High Risk"
+when
+    $b : BorrowerFact(
+        borrowerType == "SALARIED",
+        creditScore >= 600,
+        lendenScore >= 720,
+        income >= new BigDecimal("30000"),
+        interestRate >= new BigDecimal("18"),
+        age >= 20 && age <= 60,
+        loanAmount <= new BigDecimal("100000"),
+        tenure >= 1 && tenure <= 12,
+        eval(isRatioAtMost(loanAmount, income, new BigDecimal("0.60"))),
+        eval(isMonthlyPaymentRatioAtMost(loanAmount, tenure, income, new BigDecimal("0.40")))
+    )
+then
+    evaluationResult.setDecision(LendingDecision.INVEST);
+    evaluationResult.setRiskLevel(RiskLevel.HIGH);
+    evaluationResult.setRuleName("Monthly Repayment - High Risk");
+    evaluationResult.setRuleCode("MONTHLY_REPAYMENT_HIGH_RISK");
+    evaluationResult.setReason("Matched Selenium rule: Monthly Repayment - High Risk");
+    evaluationResult.setInvestmentAmount(new BigDecimal("1000.00"));
 end
 
 rule "Default Skip Rule"
