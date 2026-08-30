@@ -5,10 +5,12 @@ import com.abikananda.lendenclub.domain.LendingDecision;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateResponse;
 import com.abikananda.lendenclub.dto.InvestmentStatusRequest;
+import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.entity.Lender;
 import com.abikananda.lendenclub.entity.LendingSession;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
+import com.abikananda.lendenclub.repository.BorrowerProfileRepository;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import com.abikananda.lendenclub.repository.InvestmentRepository;
 import com.abikananda.lendenclub.repository.LenderRepository;
@@ -74,6 +76,9 @@ class MySqlPersistenceIntegrationTest {
     @Autowired
     private BorrowerSnapshotRepository snapshotRepository;
 
+    @Autowired
+    private BorrowerProfileRepository borrowerProfileRepository;
+
     @Test
     void flywayCreatesSchemaAndCrossStackPersistenceIsConsistent() {
         Lender lender = lenderRepository.save(Lender.builder()
@@ -109,12 +114,14 @@ class MySqlPersistenceIntegrationTest {
         assertNull(noMatch.getEvaluationId());
         assertEquals(0, evaluationRepository.findByLoanId("LOAN-EVAL-NO-MATCH").size());
         assertEquals(2, snapshotRepository.count());
+        assertEquals(1, borrowerProfileRepository.count());
 
         BorrowerSnapshot persistedSnapshot = snapshotRepository.findAll().stream()
                 .filter(snapshot -> "LOAN-EVAL-MATCH".equals(snapshot.getLoanId()))
                 .findFirst()
                 .orElseThrow();
         assertEquals("Integration Borrower", persistedSnapshot.getBorrowerName());
+        assertNotNull(persistedSnapshot.getBorrowerProfile());
         assertEquals("PERSONAL", persistedSnapshot.getLoanType());
         assertEquals("MONTHLY", persistedSnapshot.getRepaymentFrequency());
         assertEquals("FEMALE", persistedSnapshot.getGender());
@@ -122,7 +129,7 @@ class MySqlPersistenceIntegrationTest {
 
         InvestmentStatusRequest request = InvestmentStatusRequest.builder()
                 .sessionId(session.getSessionId())
-                .loanId("LOAN-INTEGRATION-1")
+                .loanId("LOAN-EVAL-MATCH")
                 .investmentAmount(new BigDecimal("250.00"))
                 .status(InvestmentStatus.SUCCESS)
                 .externalInvestmentId("EXT-INTEGRATION-1")
@@ -139,10 +146,16 @@ class MySqlPersistenceIntegrationTest {
         assertEquals(1, persisted.getTotalInvestments());
         assertEquals(1, persisted.getSuccessfulInvestments());
         assertEquals(0, new BigDecimal("250.00").compareTo(persisted.getTotalAmountInvested()));
-        assertEquals(lender.getId(), investmentRepository.findByExternalInvestmentId("EXT-INTEGRATION-1")
-                .orElseThrow()
-                .getLender()
-                .getId());
+
+        var persistedInvestment = investmentRepository.findByExternalInvestmentId("EXT-INTEGRATION-1").orElseThrow();
+        assertEquals(lender.getId(), persistedInvestment.getLender().getId());
+        assertNotNull(persistedInvestment.getBorrowerProfile());
+
+        BorrowerProfile profile = borrowerProfileRepository.findAll().get(0);
+        assertEquals(persistedSnapshot.getBorrowerProfile().getPublicId(), profile.getPublicId());
+        assertEquals(0, new BigDecimal("250.00").compareTo(profile.getTotalLent()));
+        assertEquals(1L, profile.getSuccessfulInvestmentCount());
+        assertNotNull(profile.getLastLentAt());
     }
 
     private BorrowerEvaluateRequest borrowerRequest(
