@@ -1,6 +1,5 @@
 package com.abikananda.lendenclub.util;
 
-import com.abikananda.lendenclub.config.NpaBorrowerImportProperties;
 import com.abikananda.lendenclub.entity.NpaBorrower;
 import com.abikananda.lendenclub.repository.NpaBorrowerRepository;
 import org.slf4j.Logger;
@@ -11,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -22,23 +22,37 @@ public class NpaBorrowerImportUtility {
 
     private static final Logger log = LoggerFactory.getLogger(NpaBorrowerImportUtility.class);
 
+    static final String MANUAL_LENDING_NPA_QUERY = """
+            SELECT DISTINCT particular
+            FROM manual_lending_investment
+            WHERE isnpa = true
+              AND particular IS NOT NULL
+            """;
+
+    static final String DEFAULT_BORROWERS_QUERY = """
+            SELECT DISTINCT name
+            FROM default_borrowers
+            WHERE name IS NOT NULL
+            """;
+
     private final JdbcTemplate sourceJdbcTemplate;
     private final NpaBorrowerRepository npaBorrowerRepository;
-    private final NpaBorrowerImportProperties properties;
 
     public NpaBorrowerImportUtility(
             @Qualifier("npaSourceJdbcTemplate") JdbcTemplate sourceJdbcTemplate,
-            NpaBorrowerRepository npaBorrowerRepository,
-            NpaBorrowerImportProperties properties) {
+            NpaBorrowerRepository npaBorrowerRepository) {
         this.sourceJdbcTemplate = sourceJdbcTemplate;
         this.npaBorrowerRepository = npaBorrowerRepository;
-        this.properties = properties;
     }
 
     @Transactional
     public ImportResult sync() {
-        String query = validateQuery(properties.getQuery());
-        List<String> sourceNames = sourceJdbcTemplate.queryForList(query, String.class);
+        List<String> manualLendingNames = sourceJdbcTemplate.queryForList(MANUAL_LENDING_NPA_QUERY, String.class);
+        List<String> defaultBorrowerNames = sourceJdbcTemplate.queryForList(DEFAULT_BORROWERS_QUERY, String.class);
+
+        List<String> sourceNames = new ArrayList<>(manualLendingNames.size() + defaultBorrowerNames.size());
+        sourceNames.addAll(manualLendingNames);
+        sourceNames.addAll(defaultBorrowerNames);
 
         Map<String, String> uniqueNames = new LinkedHashMap<>();
         for (String sourceName : sourceNames) {
@@ -78,9 +92,16 @@ public class NpaBorrowerImportUtility {
             }
         }
 
-        ImportResult result = new ImportResult(sourceNames.size(), uniqueNames.size(), inserted, reactivated, unchanged);
-        log.info("NPA borrower import completed sourceRows={} uniqueNames={} inserted={} reactivated={} unchanged={}",
-                result.sourceRows(), result.uniqueNames(), result.inserted(), result.reactivated(), result.unchanged());
+        ImportResult result = new ImportResult(
+                manualLendingNames.size(),
+                defaultBorrowerNames.size(),
+                uniqueNames.size(),
+                inserted,
+                reactivated,
+                unchanged);
+
+        log.info("NPA borrower import completed manualLendingRows={} defaultBorrowerRows={} uniqueNames={} inserted={} reactivated={} unchanged={}",
+                result.manualLendingRows(), result.defaultBorrowerRows(), result.uniqueNames(), result.inserted(), result.reactivated(), result.unchanged());
         return result;
     }
 
@@ -88,26 +109,16 @@ public class NpaBorrowerImportUtility {
         return borrowerName.trim().toLowerCase(Locale.ROOT);
     }
 
-    private static String validateQuery(String query) {
-        if (query == null || query.isBlank()) {
-            throw new IllegalStateException("npa-import.query must be configured when NPA import is enabled");
-        }
-
-        String trimmed = query.stripLeading();
-        if (!trimmed.regionMatches(true, 0, "select", 0, "select".length())) {
-            throw new IllegalArgumentException("npa-import.query must be a read-only SELECT statement");
-        }
-        if (trimmed.contains(";")) {
-            throw new IllegalArgumentException("npa-import.query must contain a single SELECT statement without semicolons");
-        }
-        return query;
-    }
-
     public record ImportResult(
-            int sourceRows,
+            int manualLendingRows,
+            int defaultBorrowerRows,
             int uniqueNames,
             int inserted,
             int reactivated,
             int unchanged) {
+
+        public int sourceRows() {
+            return manualLendingRows + defaultBorrowerRows;
+        }
     }
 }
