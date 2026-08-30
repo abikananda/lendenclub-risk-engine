@@ -51,6 +51,8 @@ public class BorrowerEvaluateRequest {
     @NotNull
     private Boolean repeated;
 
+    private Boolean trusted;
+
     private String loanType;
     private String repaymentFrequency;
     private String gender;

@@ -174,6 +174,7 @@ public class BorrowerEvaluationService {
                 .age(req.getAge())
                 .borrowerType(req.getBorrowerType())
                 .repeated(req.getRepeated())
+                .trusted(req.getTrusted())
                 .build();
     }
 

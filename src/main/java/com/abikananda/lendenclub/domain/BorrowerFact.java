@@ -22,4 +22,5 @@ public class BorrowerFact {
     private Integer age;
     private String borrowerType;
     private Boolean repeated;
+    private Boolean trusted;
 }
