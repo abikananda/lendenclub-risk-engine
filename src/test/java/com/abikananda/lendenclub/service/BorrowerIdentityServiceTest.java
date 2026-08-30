@@ -30,6 +30,7 @@ class BorrowerIdentityServiceTest {
                 .displayName("Alex Kumar")
                 .normalizedName("alex kumar")
                 .genderNormalized("male")
+                .borrowerTypeNormalized("salaried")
                 .birthYearEstimate(currentYear - 31)
                 .totalLent(new BigDecimal("2000.00"))
                 .successfulInvestmentCount(2L)
@@ -38,11 +39,34 @@ class BorrowerIdentityServiceTest {
         when(repository.findByNormalizedName("alex kumar")).thenReturn(List.of(existing));
         when(repository.save(any(BorrowerProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        BorrowerProfile resolved = service.resolveOrCreate("  ALEX   KUMAR ", "Male", 30);
+        BorrowerProfile resolved = service.resolveOrCreate("  ALEX   KUMAR ", "Male", "SALARIED", 30);
 
         assertEquals("existing-profile", resolved.getPublicId());
         assertEquals(new BigDecimal("2000.00"), resolved.getTotalLent());
         assertEquals(2L, resolved.getSuccessfulInvestmentCount());
+    }
+
+    @Test
+    void doesNotMergeSameNameWhenBorrowerTypeDiffers() {
+        BorrowerProfileRepository repository = mock(BorrowerProfileRepository.class);
+        BorrowerIdentityService service = new BorrowerIdentityService(repository);
+        int birthYear = Year.now(ZoneOffset.UTC).getValue() - 30;
+
+        BorrowerProfile existing = BorrowerProfile.builder()
+                .publicId("existing")
+                .normalizedName("alex kumar")
+                .genderNormalized("male")
+                .borrowerTypeNormalized("salaried")
+                .birthYearEstimate(birthYear)
+                .build();
+
+        when(repository.findByNormalizedName("alex kumar")).thenReturn(List.of(existing));
+        when(repository.save(any(BorrowerProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BorrowerProfile resolved = service.resolveOrCreate("Alex Kumar", "Male", "SELF_EMPLOYED", 30);
+
+        assertNotSame(existing, resolved);
+        assertEquals("self_employed", resolved.getBorrowerTypeNormalized());
     }
 
     @Test
@@ -55,19 +79,21 @@ class BorrowerIdentityServiceTest {
                 .publicId("first")
                 .normalizedName("alex kumar")
                 .genderNormalized("male")
+                .borrowerTypeNormalized("salaried")
                 .birthYearEstimate(birthYear)
                 .build();
         BorrowerProfile second = BorrowerProfile.builder()
                 .publicId("second")
                 .normalizedName("alex kumar")
                 .genderNormalized("male")
+                .borrowerTypeNormalized("salaried")
                 .birthYearEstimate(birthYear + 1)
                 .build();
 
         when(repository.findByNormalizedName("alex kumar")).thenReturn(List.of(first, second));
         when(repository.save(any(BorrowerProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        BorrowerProfile resolved = service.resolveOrCreate("Alex Kumar", "Male", 30);
+        BorrowerProfile resolved = service.resolveOrCreate("Alex Kumar", "Male", "SALARIED", 30);
 
         assertNotNull(resolved.getPublicId());
         assertNotSame(first, resolved);
