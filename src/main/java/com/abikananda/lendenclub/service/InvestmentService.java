@@ -4,8 +4,10 @@ import com.abikananda.lendenclub.domain.InvestmentStatus;
 import com.abikananda.lendenclub.dto.InvestmentResponse;
 import com.abikananda.lendenclub.dto.InvestmentStatusRequest;
 import com.abikananda.lendenclub.dto.InvestmentSummaryResponse;
+import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.Investment;
 import com.abikananda.lendenclub.entity.LendingSession;
+import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import com.abikananda.lendenclub.repository.InvestmentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,14 +27,20 @@ public class InvestmentService {
     private static final Logger log = LoggerFactory.getLogger(InvestmentService.class);
 
     private final InvestmentRepository investmentRepository;
+    private final BorrowerSnapshotRepository snapshotRepository;
     private final LendingSessionService sessionService;
+    private final BorrowerIdentityService borrowerIdentityService;
     private final AuditService auditService;
 
     public InvestmentService(InvestmentRepository investmentRepository,
+                             BorrowerSnapshotRepository snapshotRepository,
                              LendingSessionService sessionService,
+                             BorrowerIdentityService borrowerIdentityService,
                              AuditService auditService) {
         this.investmentRepository = investmentRepository;
+        this.snapshotRepository = snapshotRepository;
         this.sessionService = sessionService;
+        this.borrowerIdentityService = borrowerIdentityService;
         this.auditService = auditService;
     }
 
@@ -41,9 +49,18 @@ public class InvestmentService {
         log.info("sessionId={} loanId={} Investment status update received: status={} extId={}",
                 req.getSessionId(), req.getLoanId(), req.getStatus(), req.getExternalInvestmentId());
 
-        // Lock the session row first. This serializes investment updates for one lending session,
-        // preventing both duplicate inserts and lost counter updates under concurrent callbacks.
         LendingSession session = sessionService.requireActiveSessionForUpdate(req.getSessionId());
+
+        if (req.getStatus() == InvestmentStatus.SUCCESS) {
+            Optional<Investment> existingSuccess = investmentRepository
+                    .findFirstBySessionIdAndLoanIdAndStatusOrderByRequestedAtDesc(
+                            req.getSessionId(), req.getLoanId(), InvestmentStatus.SUCCESS);
+            if (existingSuccess.isPresent()) {
+                log.info("Idempotent SUCCESS ignored for sessionId={} loanId={}",
+                        req.getSessionId(), req.getLoanId());
+                return mapToResponse(existingSuccess.get());
+            }
+        }
 
         if (req.getExternalInvestmentId() != null && !req.getExternalInvestmentId().isBlank()) {
             Optional<Investment> existing = investmentRepository.findByExternalInvestmentId(req.getExternalInvestmentId());
@@ -57,10 +74,16 @@ public class InvestmentService {
             }
         }
 
+        BorrowerProfile borrowerProfile = snapshotRepository
+                .findTopBySessionIdAndLoanIdOrderByScrapedAtDesc(req.getSessionId(), req.getLoanId())
+                .map(snapshot -> snapshot.getBorrowerProfile())
+                .orElse(null);
+
         Investment investment = Investment.builder()
                 .loanId(req.getLoanId())
                 .sessionId(req.getSessionId())
                 .lender(session.getLender())
+                .borrowerProfile(borrowerProfile)
                 .requestedAmount(req.getInvestmentAmount())
                 .status(req.getStatus())
                 .externalInvestmentId(req.getExternalInvestmentId())
@@ -72,6 +95,16 @@ public class InvestmentService {
 
         boolean isSuccess = req.getStatus() == InvestmentStatus.SUCCESS;
         sessionService.recordInvestmentResult(session, isSuccess, req.getInvestmentAmount());
+
+        if (isSuccess && borrowerProfile != null) {
+            borrowerIdentityService.recordSuccessfulInvestment(borrowerProfile, req.getInvestmentAmount());
+            log.info("Borrower lifetime lending updated borrowerPublicId={} totalLent={} successfulInvestments={}",
+                    borrowerProfile.getPublicId(), borrowerProfile.getTotalLent(),
+                    borrowerProfile.getSuccessfulInvestmentCount());
+        } else if (isSuccess) {
+            log.warn("Successful investment has no borrower profile sessionId={} loanId={}; lifetime borrower total not updated",
+                    req.getSessionId(), req.getLoanId());
+        }
 
         auditService.logEvent("INVESTMENT_STATUS", req.getSessionId(), req.getLoanId(),
                 "Status=" + req.getStatus() + " Amount=" + req.getInvestmentAmount());
