@@ -24,6 +24,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, "INVALID_SESSION", ex.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(LenderExecutionLockedException.class)
+    public ResponseEntity<ApiErrorResponse> handleLenderExecutionLocked(LenderExecutionLockedException ex,
+                                                                         HttpServletRequest request) {
+        log.warn("Lender execution lock rejected: {}", ex.getMessage());
+        return buildResponse(HttpStatus.CONFLICT, "LENDER_ALREADY_RUNNING", ex.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
         log.error("Resource Not Found Exception: {}", ex.getMessage());
