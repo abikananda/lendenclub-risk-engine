@@ -30,13 +30,18 @@ public class BorrowerIdentityService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public BorrowerProfile resolveOrCreate(String borrowerName, String gender, Integer age) {
+    public BorrowerProfile resolveOrCreate(String borrowerName,
+                                           String gender,
+                                           String borrowerType,
+                                           Integer age) {
         String normalizedName = normalizeName(borrowerName);
         String normalizedGender = normalizeOptional(gender);
+        String normalizedBorrowerType = normalizeOptional(borrowerType);
         Integer estimatedBirthYear = estimateBirthYear(age);
 
         List<BorrowerProfile> candidates = repository.findByNormalizedName(normalizedName).stream()
                 .filter(profile -> Objects.equals(normalizedGender, profile.getGenderNormalized()))
+                .filter(profile -> Objects.equals(normalizedBorrowerType, profile.getBorrowerTypeNormalized()))
                 .filter(profile -> birthYearCompatible(estimatedBirthYear, profile.getBirthYearEstimate()))
                 .toList();
 
@@ -46,13 +51,14 @@ public class BorrowerIdentityService {
             profile.setDisplayName(borrowerName.trim());
             profile.setLastSeenAt(now);
             if (profile.getGenderNormalized() == null) profile.setGenderNormalized(normalizedGender);
+            if (profile.getBorrowerTypeNormalized() == null) profile.setBorrowerTypeNormalized(normalizedBorrowerType);
             if (profile.getBirthYearEstimate() == null) profile.setBirthYearEstimate(estimatedBirthYear);
             return repository.save(profile);
         }
 
         if (candidates.size() > 1) {
-            log.warn("Ambiguous borrower identity name={} gender={} estimatedBirthYear={} candidateCount={}; creating separate profile",
-                    borrowerName, normalizedGender, estimatedBirthYear, candidates.size());
+            log.warn("Ambiguous borrower identity name={} gender={} borrowerType={} estimatedBirthYear={} candidateCount={}; creating separate profile",
+                    borrowerName, normalizedGender, normalizedBorrowerType, estimatedBirthYear, candidates.size());
         }
 
         BorrowerProfile created = BorrowerProfile.builder()
@@ -60,6 +66,7 @@ public class BorrowerIdentityService {
                 .displayName(borrowerName.trim())
                 .normalizedName(normalizedName)
                 .genderNormalized(normalizedGender)
+                .borrowerTypeNormalized(normalizedBorrowerType)
                 .birthYearEstimate(estimatedBirthYear)
                 .totalLent(BigDecimal.ZERO)
                 .successfulInvestmentCount(0L)
