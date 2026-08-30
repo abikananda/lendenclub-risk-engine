@@ -32,6 +32,9 @@ public class BorrowerProfile {
     @Column(name = "gender_normalized", length = 30)
     private String genderNormalized;
 
+    @Column(name = "borrower_type_normalized", length = 50)
+    private String borrowerTypeNormalized;
+
     @Column(name = "birth_year_estimate")
     private Integer birthYearEstimate;
 
