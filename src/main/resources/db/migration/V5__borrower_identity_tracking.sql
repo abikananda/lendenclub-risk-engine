@@ -1,6 +1,6 @@
 CREATE TABLE borrower_profile (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    public_id CHAR(36) NOT NULL,
+    public_id VARCHAR(36) NOT NULL,
     display_name VARCHAR(160) NOT NULL,
     normalized_name VARCHAR(160) NOT NULL,
     gender_normalized VARCHAR(30) NULL,
