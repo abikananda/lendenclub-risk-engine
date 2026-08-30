@@ -14,6 +14,8 @@ import java.util.Optional;
 
 public interface InvestmentRepository extends JpaRepository<Investment, Long> {
     Optional<Investment> findByExternalInvestmentId(String externalInvestmentId);
+    Optional<Investment> findFirstBySessionIdAndLoanIdAndStatusOrderByRequestedAtDesc(
+            String sessionId, String loanId, InvestmentStatus status);
     List<Investment> findByLoanId(String loanId);
     Page<Investment> findAllByOrderByRequestedAtDesc(Pageable pageable);
     

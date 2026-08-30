@@ -21,6 +21,10 @@ public class BorrowerSnapshot {
     @Column(name = "borrower_name", length = 160)
     private String borrowerName;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "borrower_profile_id")
+    private BorrowerProfile borrowerProfile;
+
     @Column(name = "credit_score", nullable = false)
     private Integer creditScore;
 

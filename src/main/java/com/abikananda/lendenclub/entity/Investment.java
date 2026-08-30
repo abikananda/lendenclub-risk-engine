@@ -26,6 +26,10 @@ public class Investment {
     @JoinColumn(name = "lender_id", nullable = false)
     private Lender lender;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "borrower_profile_id")
+    private BorrowerProfile borrowerProfile;
+
     @Column(name = "requested_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal requestedAmount;
 

@@ -3,6 +3,7 @@ package com.abikananda.lendenclub.service;
 import com.abikananda.lendenclub.domain.EvaluationResult;
 import com.abikananda.lendenclub.domain.RiskLevel;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
+import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
@@ -38,6 +39,8 @@ class BorrowerEvaluationServiceTest {
     @Mock
     private BorrowerEvaluationRepository evaluationRepository;
     @Mock
+    private BorrowerIdentityService borrowerIdentityService;
+    @Mock
     private AuditService auditService;
 
     private BorrowerEvaluationService service;
@@ -50,6 +53,7 @@ class BorrowerEvaluationServiceTest {
                 aiRiskService,
                 snapshotRepository,
                 evaluationRepository,
+                borrowerIdentityService,
                 auditService,
                 new ObjectMapper(),
                 "test-engine");
@@ -58,6 +62,16 @@ class BorrowerEvaluationServiceTest {
     @Test
     void noMatchStillPersistsCompleteBorrowerSnapshotButDoesNotRunAiOrSaveEvaluation() {
         BorrowerEvaluateRequest request = request();
+        BorrowerProfile profile = BorrowerProfile.builder()
+                .id(10L)
+                .publicId("profile-1")
+                .displayName("Test Borrower")
+                .normalizedName("test borrower")
+                .borrowerTypeNormalized("salaried")
+                .totalLent(BigDecimal.ZERO)
+                .successfulInvestmentCount(0L)
+                .build();
+        when(borrowerIdentityService.resolveOrCreate("Test Borrower", "FEMALE", "SALARIED", 35)).thenReturn(profile);
         when(droolsService.evaluateSpecificRule(any(), eq("SESSION-1"), eq("Bulk Lenders")))
                 .thenReturn(EvaluationResult.builder()
                         .decision(null)
@@ -78,6 +92,7 @@ class BorrowerEvaluationServiceTest {
 
         assertEquals("LOAN-1", snapshot.getLoanId());
         assertEquals("Test Borrower", snapshot.getBorrowerName());
+        assertEquals(profile, snapshot.getBorrowerProfile());
         assertEquals("PERSONAL", snapshot.getLoanType());
         assertEquals("MONTHLY", snapshot.getRepaymentFrequency());
         assertEquals("FEMALE", snapshot.getGender());
