@@ -42,7 +42,7 @@ risk-engine:
 
 npa-import:
   enabled: ${NPA_IMPORT_ENABLED:false}
-  run-on-startup: ${NPA_IMPORT_RUN_ON_STARTUP:false}
+  run-on-startup: ${NPA_IMPORT_RUN_ON_STARTUP:true}
   datasource:
     url: ${NPA_SOURCE_DB_URL:jdbc:mysql://localhost:3306/pfmp?useSSL=false&serverTimezone=Asia/Kolkata}
     username: ${NPA_SOURCE_DB_USERNAME:root}
