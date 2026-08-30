@@ -40,6 +40,7 @@ public class BorrowerProfileController {
                 .borrowerProfileId(profile.getPublicId())
                 .displayName(profile.getDisplayName())
                 .gender(profile.getGenderNormalized())
+                .borrowerType(profile.getBorrowerTypeNormalized())
                 .birthYearEstimate(profile.getBirthYearEstimate())
                 .totalLent(profile.getTotalLent())
                 .successfulInvestmentCount(profile.getSuccessfulInvestmentCount())
