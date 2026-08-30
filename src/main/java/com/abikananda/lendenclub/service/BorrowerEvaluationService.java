@@ -35,6 +35,8 @@ public class BorrowerEvaluationService {
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
     private final String engineVersion;
+    private final String ruleVersion;
+    private final String rulesetVersion;
 
     public BorrowerEvaluationService(LendingSessionService sessionService,
                                      DroolsEvaluationService droolsService,
@@ -44,7 +46,9 @@ public class BorrowerEvaluationService {
                                      BorrowerIdentityService borrowerIdentityService,
                                      AuditService auditService,
                                      ObjectMapper objectMapper,
-                                     @Value("${risk-engine.version:1.0.0}") String engineVersion) {
+                                     @Value("${risk-engine.version:1.0.0}") String engineVersion,
+                                     @Value("${risk-engine.rule-version:1}") String ruleVersion,
+                                     @Value("${risk-engine.ruleset-version:2026.08}") String rulesetVersion) {
         this.sessionService = sessionService;
         this.droolsService = droolsService;
         this.aiRiskService = aiRiskService;
@@ -54,6 +58,8 @@ public class BorrowerEvaluationService {
         this.auditService = auditService;
         this.objectMapper = objectMapper;
         this.engineVersion = engineVersion;
+        this.ruleVersion = ruleVersion;
+        this.rulesetVersion = rulesetVersion;
     }
 
     @Transactional
@@ -87,18 +93,10 @@ public class BorrowerEvaluationService {
                     "BORROWER_EVALUATION_NO_MATCH",
                     req.getSessionId(),
                     req.getLoanId(),
-                    "RequestedRule=" + ruleName + " Engine=" + engineVersion);
+                    "RequestedRule=" + ruleName + " Engine=" + engineVersion
+                            + " RuleVersion=" + ruleVersion + " RulesetVersion=" + rulesetVersion);
 
-            return BorrowerEvaluateResponse.builder()
-                    .loanId(req.getLoanId())
-                    .sessionId(req.getSessionId())
-                    .decision(null)
-                    .riskLevel(result.getRiskLevel())
-                    .investmentAmount(result.getInvestmentAmount())
-                    .rule(responseRule)
-                    .reason(result.getReason())
-                    .evaluationId(null)
-                    .build();
+            return response(req, result, responseRule, null);
         }
 
         var aiResult = aiRiskService.evaluate(fact);
@@ -111,6 +109,8 @@ public class BorrowerEvaluationService {
                 .investmentAmount(result.getInvestmentAmount())
                 .ruleName(result.getRuleName())
                 .ruleCode(result.getRuleCode())
+                .ruleVersion(ruleVersion)
+                .rulesetVersion(rulesetVersion)
                 .reason(result.getReason())
                 .aiRiskScore(aiResult.getRiskScore())
                 .engineVersion(engineVersion)
@@ -122,8 +122,17 @@ public class BorrowerEvaluationService {
                 "BORROWER_EVALUATED",
                 req.getSessionId(),
                 req.getLoanId(),
-                "Decision=" + result.getDecision() + " Rule=" + result.getRuleName() + " Engine=" + engineVersion);
+                "Decision=" + result.getDecision() + " Rule=" + result.getRuleName()
+                        + " Engine=" + engineVersion + " RuleVersion=" + ruleVersion
+                        + " RulesetVersion=" + rulesetVersion);
 
+        return response(req, result, responseRule, evaluation.getId());
+    }
+
+    private BorrowerEvaluateResponse response(BorrowerEvaluateRequest req,
+                                              EvaluationResult result,
+                                              String responseRule,
+                                              Long evaluationId) {
         return BorrowerEvaluateResponse.builder()
                 .loanId(req.getLoanId())
                 .sessionId(req.getSessionId())
@@ -131,8 +140,11 @@ public class BorrowerEvaluationService {
                 .riskLevel(result.getRiskLevel())
                 .investmentAmount(result.getInvestmentAmount())
                 .rule(responseRule)
+                .ruleVersion(ruleVersion)
+                .rulesetVersion(rulesetVersion)
+                .engineVersion(engineVersion)
                 .reason(result.getReason())
-                .evaluationId(evaluation.getId())
+                .evaluationId(evaluationId)
                 .build();
     }
 
