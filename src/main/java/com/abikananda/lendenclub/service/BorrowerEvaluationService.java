@@ -6,6 +6,7 @@ import com.abikananda.lendenclub.domain.LendingRule;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateResponse;
 import com.abikananda.lendenclub.entity.BorrowerEvaluation;
+import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
@@ -30,6 +31,7 @@ public class BorrowerEvaluationService {
     private final AiRiskService aiRiskService;
     private final BorrowerSnapshotRepository snapshotRepository;
     private final BorrowerEvaluationRepository evaluationRepository;
+    private final BorrowerIdentityService borrowerIdentityService;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
     private final String engineVersion;
@@ -39,6 +41,7 @@ public class BorrowerEvaluationService {
                                      AiRiskService aiRiskService,
                                      BorrowerSnapshotRepository snapshotRepository,
                                      BorrowerEvaluationRepository evaluationRepository,
+                                     BorrowerIdentityService borrowerIdentityService,
                                      AuditService auditService,
                                      ObjectMapper objectMapper,
                                      @Value("${risk-engine.version:1.0.0}") String engineVersion) {
@@ -47,6 +50,7 @@ public class BorrowerEvaluationService {
         this.aiRiskService = aiRiskService;
         this.snapshotRepository = snapshotRepository;
         this.evaluationRepository = evaluationRepository;
+        this.borrowerIdentityService = borrowerIdentityService;
         this.auditService = auditService;
         this.objectMapper = objectMapper;
         this.engineVersion = engineVersion;
@@ -134,9 +138,13 @@ public class BorrowerEvaluationService {
 
     private void saveSnapshot(BorrowerEvaluateRequest req) {
         try {
+            BorrowerProfile profile = borrowerIdentityService.resolveOrCreate(
+                    req.getBorrowerName(), req.getGender(), req.getAge());
+
             BorrowerSnapshot snapshot = BorrowerSnapshot.builder()
                     .loanId(req.getLoanId())
                     .borrowerName(req.getBorrowerName())
+                    .borrowerProfile(profile)
                     .sessionId(req.getSessionId())
                     .creditScore(req.getCreditScore())
                     .lendenScore(req.getLendenScore())
@@ -155,8 +163,10 @@ public class BorrowerEvaluationService {
                     .rawPayload(objectMapper.writeValueAsString(req))
                     .build();
             snapshotRepository.save(snapshot);
+            log.info("sessionId={} loanId={} borrowerProfileId={} borrowerPublicId={} snapshot saved",
+                    req.getSessionId(), req.getLoanId(), profile.getId(), profile.getPublicId());
         } catch (Exception e) {
-            log.error("sessionId={} loanId={} Failed to save borrower snapshot: {}",
+            log.error("sessionId={} loanId={} Failed to save borrower snapshot/identity: {}",
                     req.getSessionId(), req.getLoanId(), e.getMessage());
         }
     }
