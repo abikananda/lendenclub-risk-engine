@@ -12,6 +12,7 @@ public class BorrowerProfileResponse {
     private String borrowerProfileId;
     private String displayName;
     private String gender;
+    private String borrowerType;
     private Integer birthYearEstimate;
     private BigDecimal totalLent;
     private Long successfulInvestmentCount;
