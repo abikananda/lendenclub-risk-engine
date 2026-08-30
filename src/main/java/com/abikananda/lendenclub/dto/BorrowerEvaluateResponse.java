@@ -19,6 +19,9 @@ public class BorrowerEvaluateResponse {
     private RiskLevel riskLevel;
     private BigDecimal investmentAmount;
     private String rule;
+    private String ruleVersion;
+    private String rulesetVersion;
+    private String engineVersion;
     private String reason;
     private Long evaluationId;
 }
