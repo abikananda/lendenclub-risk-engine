@@ -40,6 +40,12 @@ public class BorrowerEvaluation {
     @Column(name = "rule_code", length = 50)
     private String ruleCode;
 
+    @Column(name = "rule_version", length = 30)
+    private String ruleVersion;
+
+    @Column(name = "ruleset_version", length = 50)
+    private String rulesetVersion;
+
     @Column(name = "reason", columnDefinition = "TEXT")
     private String reason;
 
