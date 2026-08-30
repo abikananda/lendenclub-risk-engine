@@ -122,6 +122,8 @@ class MySqlPersistenceIntegrationTest {
                 .orElseThrow();
         assertEquals("Integration Borrower", persistedSnapshot.getBorrowerName());
         assertNotNull(persistedSnapshot.getBorrowerProfile());
+        Long snapshotBorrowerProfileId = persistedSnapshot.getBorrowerProfile().getId();
+        assertNotNull(snapshotBorrowerProfileId);
         assertEquals("PERSONAL", persistedSnapshot.getLoanType());
         assertEquals("MONTHLY", persistedSnapshot.getRepaymentFrequency());
         assertEquals("FEMALE", persistedSnapshot.getGender());
@@ -150,9 +152,9 @@ class MySqlPersistenceIntegrationTest {
         var persistedInvestment = investmentRepository.findByExternalInvestmentId("EXT-INTEGRATION-1").orElseThrow();
         assertEquals(lender.getId(), persistedInvestment.getLender().getId());
         assertNotNull(persistedInvestment.getBorrowerProfile());
+        assertEquals(snapshotBorrowerProfileId, persistedInvestment.getBorrowerProfile().getId());
 
-        BorrowerProfile profile = borrowerProfileRepository.findAll().get(0);
-        assertEquals(persistedSnapshot.getBorrowerProfile().getPublicId(), profile.getPublicId());
+        BorrowerProfile profile = borrowerProfileRepository.findById(snapshotBorrowerProfileId).orElseThrow();
         assertEquals(0, new BigDecimal("250.00").compareTo(profile.getTotalLent()));
         assertEquals(1L, profile.getSuccessfulInvestmentCount());
         assertNotNull(profile.getLastLentAt());
