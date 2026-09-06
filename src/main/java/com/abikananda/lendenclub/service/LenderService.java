@@ -18,22 +18,51 @@ public class LenderService {
     private final LenderRepository lenderRepository;
     private final InvestmentConfigRepository investmentConfigRepository;
     private final LendingSessionService sessionService;
+    private final LenderExecutionLeaseService leaseService;
 
     public LenderService(LenderRepository lenderRepository,
                          InvestmentConfigRepository investmentConfigRepository,
-                         LendingSessionService sessionService) {
+                         LendingSessionService sessionService,
+                         LenderExecutionLeaseService leaseService) {
         this.lenderRepository = lenderRepository;
         this.investmentConfigRepository = investmentConfigRepository;
         this.sessionService = sessionService;
+        this.leaseService = leaseService;
+    }
+
+    @Transactional(readOnly = true)
+    public LenderDto getLenderConfig(String username) {
+        ResolvedLender resolved = resolve(username);
+        return toLenderDto(resolved.lender(), resolved.config());
     }
 
     @Transactional
-    public LenderResponse getLenderAndStartSession() {
-        return getLenderAndStartSession(null);
+    public LenderResponse startSession(String username, String ownerId) {
+        ResolvedLender resolved = resolve(username);
+        Lender lender = resolved.lender();
+        InvestmentConfig config = resolved.config();
+
+        LendingSession session = sessionService.createSession(
+                lender,
+                config.getInvestmentAmount(),
+                config.getLendingRules());
+
+        // Session creation and lease acquisition share one transaction. If another
+        // process already owns the lender, this transaction rolls back and no orphan
+        // STARTED session is left behind.
+        leaseService.acquire(lender, session.getSessionId(), ownerId);
+
+        return LenderResponse.builder()
+                .sessionId(session.getSessionId())
+                .lender(toLenderDto(lender, config))
+                .session(SessionDto.builder()
+                        .status(session.getStatus())
+                        .startedAt(session.getStartedAt())
+                        .build())
+                .build();
     }
 
-    @Transactional
-    public LenderResponse getLenderAndStartSession(String username) {
+    private ResolvedLender resolve(String username) {
         Lender lender = username == null || username.isBlank()
                 ? lenderRepository.findFirstByActiveTrue()
                     .orElseThrow(() -> new ResourceNotFoundException("No active lender found"))
@@ -55,27 +84,21 @@ public class LenderService {
             throw new IllegalStateException("At least one lending rule is required for lender: " + lender.getUsername());
         }
 
-        LendingSession session = sessionService.createSession(
-                lender,
-                config.getInvestmentAmount(),
-                config.getLendingRules());
+        return new ResolvedLender(lender, config);
+    }
 
-        return LenderResponse.builder()
-                .sessionId(session.getSessionId())
-                .lender(LenderDto.builder()
-                        .lenderId(lender.getExternalLenderId())
-                        .name(lender.getDisplayName())
-                        .walletAmount(config.getInvestmentAmount())
-                        .username(lender.getUsername())
-                        .mobileNumber(lender.getMobileNumber())
-                        .otpUsername(lender.getOtpUsername())
-                        .lendingRules(config.getLendingRules())
-                        .active(lender.getActive())
-                        .build())
-                .session(SessionDto.builder()
-                        .status(session.getStatus())
-                        .startedAt(session.getStartedAt())
-                        .build())
+    private LenderDto toLenderDto(Lender lender, InvestmentConfig config) {
+        return LenderDto.builder()
+                .lenderId(lender.getExternalLenderId())
+                .name(lender.getDisplayName())
+                .walletAmount(config.getInvestmentAmount())
+                .username(lender.getUsername())
+                .mobileNumber(lender.getMobileNumber())
+                .otpUsername(lender.getOtpUsername())
+                .lendingRules(config.getLendingRules())
+                .active(lender.getActive())
                 .build();
     }
+
+    private record ResolvedLender(Lender lender, InvestmentConfig config) {}
 }

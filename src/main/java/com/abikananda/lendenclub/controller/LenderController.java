@@ -1,9 +1,13 @@
 package com.abikananda.lendenclub.controller;
 
+import com.abikananda.lendenclub.dto.LenderDto;
 import com.abikananda.lendenclub.dto.LenderResponse;
 import com.abikananda.lendenclub.dto.LendingSessionResponse;
+import com.abikananda.lendenclub.dto.StartLendingSessionRequest;
+import com.abikananda.lendenclub.service.LenderExecutionLeaseService;
 import com.abikananda.lendenclub.service.LenderService;
 import com.abikananda.lendenclub.service.LendingSessionService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,26 +17,51 @@ public class LenderController {
 
     private final LenderService lenderService;
     private final LendingSessionService sessionService;
+    private final LenderExecutionLeaseService leaseService;
 
-    public LenderController(LenderService lenderService, LendingSessionService sessionService) {
+    public LenderController(LenderService lenderService,
+                            LendingSessionService sessionService,
+                            LenderExecutionLeaseService leaseService) {
         this.lenderService = lenderService;
         this.sessionService = sessionService;
+        this.leaseService = leaseService;
     }
 
-    @GetMapping("/data")
-    public ResponseEntity<LenderResponse> getLenderData(
+    @GetMapping("/config")
+    public ResponseEntity<LenderDto> getLenderConfig(
             @RequestParam(name = "username", required = false) String username) {
-        return ResponseEntity.ok(lenderService.getLenderAndStartSession(username));
+        return ResponseEntity.ok(lenderService.getLenderConfig(username));
+    }
+
+    /**
+     * Backward-compatible read-only alias. New automation code should use /config.
+     */
+    @Deprecated
+    @GetMapping("/data")
+    public ResponseEntity<LenderDto> getLenderData(
+            @RequestParam(name = "username", required = false) String username) {
+        return ResponseEntity.ok(lenderService.getLenderConfig(username));
+    }
+
+    @PostMapping("/session")
+    public ResponseEntity<LenderResponse> startSession(
+            @RequestParam(name = "username", required = false) String username,
+            @Valid @RequestBody StartLendingSessionRequest request) {
+        return ResponseEntity.ok(lenderService.startSession(username, request.getOwnerId()));
     }
 
     @PostMapping("/session/{sessionId}/complete")
     public ResponseEntity<LendingSessionResponse> completeSession(@PathVariable String sessionId) {
-        return ResponseEntity.ok(sessionService.completeSession(sessionId));
+        LendingSessionResponse response = sessionService.completeSession(sessionId);
+        leaseService.release(sessionId);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/session/{sessionId}/cancel")
     public ResponseEntity<LendingSessionResponse> cancelSession(@PathVariable String sessionId) {
-        return ResponseEntity.ok(sessionService.cancelSession(sessionId));
+        LendingSessionResponse response = sessionService.cancelSession(sessionId);
+        leaseService.release(sessionId);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/session/{sessionId}")

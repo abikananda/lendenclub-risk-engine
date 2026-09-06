@@ -28,6 +28,7 @@ class LenderServiceInvestmentConfigTest {
     @Mock private LenderRepository lenderRepository;
     @Mock private InvestmentConfigRepository investmentConfigRepository;
     @Mock private LendingSessionService sessionService;
+    @Mock private LenderExecutionLeaseService leaseService;
 
     @Test
     void startsRequestedLenderByUsernameUsingInvestmentConfigSnapshot() {
@@ -67,8 +68,12 @@ class LenderServiceInvestmentConfigTest {
         when(investmentConfigRepository.findByLender_IdAndEnabledTrue(10L)).thenReturn(Optional.of(config));
         when(sessionService.createSession(lender, config.getInvestmentAmount(), configuredRules)).thenReturn(session);
 
-        LenderService service = new LenderService(lenderRepository, investmentConfigRepository, sessionService);
-        LenderResponse response = service.getLenderAndStartSession("lender-a");
+        LenderService service = new LenderService(
+                lenderRepository,
+                investmentConfigRepository,
+                sessionService,
+                leaseService);
+        LenderResponse response = service.startSession("lender-a", "PW-TEST-OWNER");
 
         assertEquals("LS-TEST-A", response.getSessionId());
         assertEquals("LENDER-A", response.getLender().getLenderId());
@@ -76,5 +81,6 @@ class LenderServiceInvestmentConfigTest {
         assertEquals(new BigDecimal("10000.00"), response.getLender().getWalletAmount());
         assertEquals(configuredRules, response.getLender().getLendingRules());
         verify(sessionService).createSession(lender, new BigDecimal("10000.00"), configuredRules);
+        verify(leaseService).acquire(lender, "LS-TEST-A", "PW-TEST-OWNER");
     }
 }
