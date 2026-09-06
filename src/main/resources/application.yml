@@ -45,17 +45,13 @@ npa-import:
   run-on-startup: ${NPA_IMPORT_RUN_ON_STARTUP:true}
   datasource:
     url: ${NPA_SOURCE_DB_URL:jdbc:mysql://localhost:3306/pfmp?useSSL=false&serverTimezone=Asia/Kolkata}
-    username: ${NPA_SOURCE_DB_USERNAME:root}
+    username: ${NPA_SOURCE_DB_USERNAME:${DB_USERNAME:root}}
     password: ${NPA_SOURCE_DB_PASSWORD:${DB_PASSWORD:root}}
     driver-class-name: ${NPA_SOURCE_DB_DRIVER:com.mysql.cj.jdbc.Driver}
 
 otp:
   max-retries: ${OTP_MAX_RETRIES:5}
   retry-delay-ms: ${OTP_RETRY_DELAY_MS:2000}
-
-gmail:
-  username: ${GMAIL_USERNAME:placeholder-username}
-  password: ${GMAIL_PASSWORD:placeholder-password}
 
 management:
   endpoints:
