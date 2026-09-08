@@ -32,6 +32,7 @@ public class BorrowerEvaluationService {
     private final BorrowerSnapshotRepository snapshotRepository;
     private final BorrowerEvaluationRepository evaluationRepository;
     private final BorrowerIdentityService borrowerIdentityService;
+    private final TrustedBorrowerService trustedBorrowerService;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
     private final String engineVersion;
@@ -42,6 +43,7 @@ public class BorrowerEvaluationService {
                                      BorrowerSnapshotRepository snapshotRepository,
                                      BorrowerEvaluationRepository evaluationRepository,
                                      BorrowerIdentityService borrowerIdentityService,
+                                     TrustedBorrowerService trustedBorrowerService,
                                      AuditService auditService,
                                      ObjectMapper objectMapper,
                                      @Value("${risk-engine.version:1.0.0}") String engineVersion) {
@@ -51,6 +53,7 @@ public class BorrowerEvaluationService {
         this.snapshotRepository = snapshotRepository;
         this.evaluationRepository = evaluationRepository;
         this.borrowerIdentityService = borrowerIdentityService;
+        this.trustedBorrowerService = trustedBorrowerService;
         this.auditService = auditService;
         this.objectMapper = objectMapper;
         this.engineVersion = engineVersion;
@@ -70,9 +73,19 @@ public class BorrowerEvaluationService {
 
     private BorrowerEvaluateResponse evaluateAndPersist(BorrowerEvaluateRequest req, String ruleName) {
         sessionService.validateAndTouchSession(req.getSessionId());
-        saveSnapshot(req);
+        BorrowerProfile profile = resolveProfileAndSaveSnapshot(req);
 
-        BorrowerFact fact = toFact(req);
+        boolean trusted = isTrustedRule(ruleName)
+                ? trustedBorrowerService.isTrusted(profile)
+                : Boolean.TRUE.equals(req.getTrusted());
+
+        if (isTrustedRule(ruleName)) {
+            log.info("sessionId={} loanId={} trustedRule={} borrowerProfileId={} trusted={}",
+                    req.getSessionId(), req.getLoanId(), ruleName,
+                    profile == null ? null : profile.getId(), trusted);
+        }
+
+        BorrowerFact fact = toFact(req, trusted);
         EvaluationResult result = ruleName == null
                 ? droolsService.evaluate(fact, req.getSessionId())
                 : droolsService.evaluateSpecificRule(fact, req.getSessionId(), ruleName);
@@ -136,7 +149,7 @@ public class BorrowerEvaluationService {
                 .build();
     }
 
-    private void saveSnapshot(BorrowerEvaluateRequest req) {
+    private BorrowerProfile resolveProfileAndSaveSnapshot(BorrowerEvaluateRequest req) {
         try {
             BorrowerProfile profile = borrowerIdentityService.resolveOrCreate(
                     req.getBorrowerName(), req.getGender(), req.getBorrowerType(), req.getAge());
@@ -165,13 +178,15 @@ public class BorrowerEvaluationService {
             snapshotRepository.save(snapshot);
             log.info("sessionId={} loanId={} borrowerProfileId={} borrowerPublicId={} snapshot saved",
                     req.getSessionId(), req.getLoanId(), profile.getId(), profile.getPublicId());
+            return profile;
         } catch (Exception e) {
             log.error("sessionId={} loanId={} Failed to save borrower snapshot/identity: {}",
                     req.getSessionId(), req.getLoanId(), e.getMessage());
+            return null;
         }
     }
 
-    private BorrowerFact toFact(BorrowerEvaluateRequest req) {
+    private BorrowerFact toFact(BorrowerEvaluateRequest req, boolean trusted) {
         return BorrowerFact.builder()
                 .loanId(req.getLoanId())
                 .creditScore(req.getCreditScore())
@@ -184,8 +199,17 @@ public class BorrowerEvaluationService {
                 .age(req.getAge())
                 .borrowerType(req.getBorrowerType())
                 .repeated(req.getRepeated())
-                .trusted(req.getTrusted())
+                .trusted(trusted)
                 .build();
+    }
+
+    private boolean isTrustedRule(String ruleName) {
+        if (ruleName == null || ruleName.isBlank()) return false;
+        try {
+            return LendingRule.fromRuleName(ruleName).name().startsWith("TRUSTED_LENDERS_");
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     public List<BorrowerEvaluation> getEvaluationsForLoan(String loanId) {
