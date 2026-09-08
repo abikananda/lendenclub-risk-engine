@@ -28,20 +28,14 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class BorrowerEvaluationServiceTest {
 
-    @Mock
-    private LendingSessionService sessionService;
-    @Mock
-    private DroolsEvaluationService droolsService;
-    @Mock
-    private AiRiskService aiRiskService;
-    @Mock
-    private BorrowerSnapshotRepository snapshotRepository;
-    @Mock
-    private BorrowerEvaluationRepository evaluationRepository;
-    @Mock
-    private BorrowerIdentityService borrowerIdentityService;
-    @Mock
-    private AuditService auditService;
+    @Mock private LendingSessionService sessionService;
+    @Mock private DroolsEvaluationService droolsService;
+    @Mock private AiRiskService aiRiskService;
+    @Mock private BorrowerSnapshotRepository snapshotRepository;
+    @Mock private BorrowerEvaluationRepository evaluationRepository;
+    @Mock private BorrowerIdentityService borrowerIdentityService;
+    @Mock private TrustedBorrowerService trustedBorrowerService;
+    @Mock private AuditService auditService;
 
     private BorrowerEvaluationService service;
 
@@ -54,6 +48,7 @@ class BorrowerEvaluationServiceTest {
                 snapshotRepository,
                 evaluationRepository,
                 borrowerIdentityService,
+                trustedBorrowerService,
                 auditService,
                 new ObjectMapper(),
                 "test-engine");
@@ -62,15 +57,7 @@ class BorrowerEvaluationServiceTest {
     @Test
     void noMatchStillPersistsCompleteBorrowerSnapshotButDoesNotRunAiOrSaveEvaluation() {
         BorrowerEvaluateRequest request = request();
-        BorrowerProfile profile = BorrowerProfile.builder()
-                .id(10L)
-                .publicId("profile-1")
-                .displayName("Test Borrower")
-                .normalizedName("test borrower")
-                .borrowerTypeNormalized("salaried")
-                .totalLent(BigDecimal.ZERO)
-                .successfulInvestmentCount(0L)
-                .build();
+        BorrowerProfile profile = profile();
         when(borrowerIdentityService.resolveOrCreate("Test Borrower", "FEMALE", "SALARIED", 35)).thenReturn(profile);
         when(droolsService.evaluateSpecificRule(any(), eq("SESSION-1"), eq("Bulk Lenders")))
                 .thenReturn(EvaluationResult.builder()
@@ -103,6 +90,37 @@ class BorrowerEvaluationServiceTest {
 
         verify(aiRiskService, never()).evaluate(any());
         verify(evaluationRepository, never()).save(any());
+        verify(trustedBorrowerService, never()).isTrusted(any());
+    }
+
+    @Test
+    void trustedRuleDerivesTrustedFlagFromRegistryInsteadOfRequestPayload() {
+        BorrowerEvaluateRequest request = request();
+        request.setTrusted(false);
+        BorrowerProfile profile = profile();
+        when(borrowerIdentityService.resolveOrCreate("Test Borrower", "FEMALE", "SALARIED", 35)).thenReturn(profile);
+        when(trustedBorrowerService.isTrusted(profile)).thenReturn(true);
+        when(droolsService.evaluateSpecificRule(any(), eq("SESSION-1"), eq("Trusted Lenders - Low Risk")))
+                .thenReturn(EvaluationResult.builder().decision(null).reason("No match").build());
+
+        service.evaluateSpecificRule(request, "Trusted Lenders - Low Risk");
+
+        ArgumentCaptor<com.abikananda.lendenclub.domain.BorrowerFact> factCaptor =
+                ArgumentCaptor.forClass(com.abikananda.lendenclub.domain.BorrowerFact.class);
+        verify(droolsService).evaluateSpecificRule(factCaptor.capture(), eq("SESSION-1"), eq("Trusted Lenders - Low Risk"));
+        assertEquals(true, factCaptor.getValue().getTrusted());
+    }
+
+    private BorrowerProfile profile() {
+        return BorrowerProfile.builder()
+                .id(10L)
+                .publicId("profile-1")
+                .displayName("Test Borrower")
+                .normalizedName("test borrower")
+                .borrowerTypeNormalized("salaried")
+                .totalLent(BigDecimal.ZERO)
+                .successfulInvestmentCount(0L)
+                .build();
     }
 
     private BorrowerEvaluateRequest request() {
