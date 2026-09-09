@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface BorrowerSnapshotRepository extends JpaRepository<BorrowerSnapshot, Long> {
     Optional<BorrowerSnapshot> findTopBySessionIdAndLoanIdOrderByScrapedAtDesc(String sessionId, String loanId);
+
+    Optional<BorrowerSnapshot> findTopByLoanIdAndBorrowerNameIsNotNullOrderByScrapedAtDesc(String loanId);
 }
