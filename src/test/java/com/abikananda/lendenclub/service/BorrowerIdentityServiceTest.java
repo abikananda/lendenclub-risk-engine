@@ -7,17 +7,38 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.Year;
 import java.time.ZoneOffset;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class BorrowerIdentityServiceTest {
+
+    @Test
+    void historicalImportMatchesProfileWhenSeleniumHasNoGender() {
+        BorrowerProfileRepository repository = mock(BorrowerProfileRepository.class);
+        BorrowerIdentityService service = service(repository);
+        OffsetDateTime observedAt = OffsetDateTime.parse("2024-06-01T10:00:00Z");
+        BorrowerProfile existing = BorrowerProfile.builder().id(1L).publicId("existing-profile")
+                .displayName("Jane Doe").normalizedName("jane doe").genderNormalized("female")
+                .borrowerTypeNormalized("salaried").birthYearEstimate(1989)
+                .lastSeenAt(OffsetDateTime.parse("2024-01-01T10:00:00Z")).build();
+        when(repository.findByNormalizedName("jane doe")).thenReturn(List.of(existing));
+        when(repository.save(any(BorrowerProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BorrowerProfile resolved = service.resolveOrCreateAt(
+                "Jane Doe", null, "SALARIED", 35, observedAt);
+
+        assertSame(existing, resolved);
+        assertEquals(observedAt, resolved.getLastSeenAt());
+    }
 
     @Test
     void reusesSingleCompatibleProfileAcrossBirthdayBoundary() {
