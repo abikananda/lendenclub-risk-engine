@@ -36,22 +36,35 @@ public class BorrowerIdentityService {
                                            String gender,
                                            String borrowerType,
                                            Integer age) {
+        return resolveOrCreateAt(borrowerName, gender, borrowerType, age,
+                OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public BorrowerProfile resolveOrCreateAt(String borrowerName,
+                                             String gender,
+                                             String borrowerType,
+                                             Integer age,
+                                             OffsetDateTime observedAt) {
         String normalizedName = normalizeName(borrowerName);
         String normalizedGender = normalizeOptional(gender);
         String normalizedBorrowerType = normalizeOptional(borrowerType);
-        Integer estimatedBirthYear = estimateBirthYear(age);
+        OffsetDateTime seenAt = observedAt == null ? OffsetDateTime.now(ZoneOffset.UTC) : observedAt;
+        Integer estimatedBirthYear = estimateBirthYear(age, seenAt.getYear());
 
         List<BorrowerProfile> candidates = repository.findByNormalizedName(normalizedName).stream()
-                .filter(profile -> Objects.equals(normalizedGender, profile.getGenderNormalized()))
+                .filter(profile -> normalizedGender == null || profile.getGenderNormalized() == null
+                        || Objects.equals(normalizedGender, profile.getGenderNormalized()))
                 .filter(profile -> Objects.equals(normalizedBorrowerType, profile.getBorrowerTypeNormalized()))
                 .filter(profile -> birthYearCompatible(estimatedBirthYear, profile.getBirthYearEstimate()))
                 .toList();
 
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         if (candidates.size() == 1) {
             BorrowerProfile profile = candidates.get(0);
-            profile.setDisplayName(borrowerName.trim());
-            profile.setLastSeenAt(now);
+            if (profile.getLastSeenAt() == null || seenAt.isAfter(profile.getLastSeenAt())) {
+                profile.setDisplayName(borrowerName.trim());
+                profile.setLastSeenAt(seenAt);
+            }
             if (profile.getGenderNormalized() == null) profile.setGenderNormalized(normalizedGender);
             if (profile.getBorrowerTypeNormalized() == null) profile.setBorrowerTypeNormalized(normalizedBorrowerType);
             if (profile.getBirthYearEstimate() == null) profile.setBirthYearEstimate(estimatedBirthYear);
@@ -72,7 +85,7 @@ public class BorrowerIdentityService {
                 .birthYearEstimate(estimatedBirthYear)
                 .totalLent(BigDecimal.ZERO)
                 .successfulInvestmentCount(0L)
-                .lastSeenAt(now)
+                .lastSeenAt(seenAt)
                 .build());
     }
 
@@ -112,8 +125,12 @@ public class BorrowerIdentityService {
     }
 
     static Integer estimateBirthYear(Integer age) {
+        return estimateBirthYear(age, Year.now(ZoneOffset.UTC).getValue());
+    }
+
+    static Integer estimateBirthYear(Integer age, int observationYear) {
         if (age == null || age <= 0) return null;
-        return Year.now(ZoneOffset.UTC).getValue() - age;
+        return observationYear - age;
     }
 
     private static boolean birthYearCompatible(Integer observed, Integer stored) {
