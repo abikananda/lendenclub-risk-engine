@@ -2,6 +2,7 @@ package com.abikananda.lendenclub.service;
 
 import com.abikananda.lendenclub.dto.BorrowerLookupResponse;
 import com.abikananda.lendenclub.entity.BorrowerSnapshot;
+import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.exception.ResourceNotFoundException;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import org.junit.jupiter.api.Test;
@@ -24,12 +25,14 @@ class BorrowerLookupServiceTest {
         BorrowerSnapshot snapshot = BorrowerSnapshot.builder()
                 .loanId("LN-1001")
                 .borrowerName("  Jane Doe  ")
+                .borrowerProfile(BorrowerProfile.builder().publicId("BRW-123").build())
                 .build();
         when(repository.findTopByLoanIdAndBorrowerNameIsNotNullOrderByScrapedAtDesc("LN-1001"))
                 .thenReturn(Optional.of(snapshot));
 
         BorrowerLookupResponse response = service.findByLoanId(" LN-1001 ");
 
+        assertEquals("BRW-123", response.borrowerId());
         assertEquals("LN-1001", response.loanId());
         assertEquals("Jane Doe", response.name());
         verify(repository).findTopByLoanIdAndBorrowerNameIsNotNullOrderByScrapedAtDesc("LN-1001");
@@ -57,5 +60,21 @@ class BorrowerLookupServiceTest {
                 .thenReturn(Optional.of(snapshot));
 
         assertThrows(ResourceNotFoundException.class, () -> service.findByLoanId("LN-1002"));
+    }
+
+    @Test
+    void throwsNotFoundWhenSnapshotHasNoPersistentBorrowerIdentity() {
+        BorrowerSnapshot snapshot = BorrowerSnapshot.builder()
+                .loanId("LN-1003")
+                .borrowerName("Jane Doe")
+                .build();
+        when(repository.findTopByLoanIdAndBorrowerNameIsNotNullOrderByScrapedAtDesc("LN-1003"))
+                .thenReturn(Optional.of(snapshot));
+
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> service.findByLoanId("LN-1003"));
+
+        assertEquals("Borrower identity not found for loan ID LN-1003", exception.getMessage());
     }
 }

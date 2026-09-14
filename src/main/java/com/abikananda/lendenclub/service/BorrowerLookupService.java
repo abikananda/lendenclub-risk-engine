@@ -2,6 +2,7 @@ package com.abikananda.lendenclub.service;
 
 import com.abikananda.lendenclub.dto.BorrowerLookupResponse;
 import com.abikananda.lendenclub.entity.BorrowerSnapshot;
+import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.exception.ResourceNotFoundException;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,13 @@ public class BorrowerLookupService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Borrower not found for loan ID " + normalizedLoanId));
 
-        return new BorrowerLookupResponse(snapshot.getLoanId(), snapshot.getBorrowerName().trim());
+        BorrowerProfile profile = snapshot.getBorrowerProfile();
+        if (profile == null || profile.getPublicId() == null || profile.getPublicId().isBlank()) {
+            throw new ResourceNotFoundException(
+                    "Borrower identity not found for loan ID " + normalizedLoanId);
+        }
+
+        return new BorrowerLookupResponse(
+                profile.getPublicId().trim(), snapshot.getLoanId(), snapshot.getBorrowerName().trim());
     }
 }
