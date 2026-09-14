@@ -1,6 +1,7 @@
 package com.abikananda.lendenclub.service;
 
 import com.abikananda.lendenclub.domain.AiRiskResult;
+import com.abikananda.lendenclub.domain.AiRiskStatus;
 import com.abikananda.lendenclub.domain.BorrowerFact;
 import com.abikananda.lendenclub.domain.RiskLevel;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -16,6 +17,8 @@ public class NoOpAiRiskService implements AiRiskService {
                 .riskScore(0.0)
                 .riskLevel(RiskLevel.UNKNOWN)
                 .rationale("AI Risk Engine Disabled")
+                .provider("noop")
+                .status(AiRiskStatus.DISABLED)
                 .build();
     }
 }
