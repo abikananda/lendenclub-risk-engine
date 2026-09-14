@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -17,8 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@ConditionalOnProperty(name = "risk-engine.ai.provider", havingValue = "ollama")
-@ConditionalOnProperty(name = "risk-engine.ai.enabled", havingValue = "true")
+@ConditionalOnExpression("'${risk-engine.ai.enabled:false}' == 'true' && '${risk-engine.ai.provider:noop}' == 'ollama'")
 public class OllamaAiRiskService implements AiRiskService {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaAiRiskService.class);
