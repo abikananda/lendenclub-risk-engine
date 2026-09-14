@@ -45,6 +45,7 @@ class BorrowerEvaluationServiceTest {
                 sessionService,
                 droolsService,
                 aiRiskService,
+                new HybridRiskDecisionService("off"),
                 snapshotRepository,
                 evaluationRepository,
                 borrowerIdentityService,
