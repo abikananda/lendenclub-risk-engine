@@ -37,3 +37,34 @@ confidence, recommendation and reduction amount.
 3. Review all `PROVIDER_ERROR` and `INVALID_RESPONSE` rows.
 4. Approve a pinned model and prompt version.
 5. Enable `guardrail` for a small lender cohort before wider use.
+
+
+## Test endpoint
+
+`POST /api/ai-risk/test` invokes only the configured AI provider. It does not run
+Drools, create a borrower evaluation, or initiate an investment.
+
+```bash
+curl -X POST http://localhost:8081/api/ai-risk/test \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <backend-api-key>" \
+  -d '{
+    "creditScore": 701,
+    "lendenScore": 800,
+    "income": 50000,
+    "loanAmount": 5000,
+    "interestRate": 36.48,
+    "tenure": 4,
+    "emi": 1250,
+    "age": 35,
+    "borrowerType": "SALARIED",
+    "repeated": false,
+    "trusted": false
+  }'
+```
+
+When `AI_ENABLED=false`, the endpoint returns `status: "DISABLED"`. With Ollama
+enabled, a successful response returns `status: "COMPLETED"` plus the structured
+score, recommendation, confidence, concerns, positive factors, rationale, model,
+prompt version, and latency. If backend API-key authentication is disabled, omit
+the `X-API-Key` header.
