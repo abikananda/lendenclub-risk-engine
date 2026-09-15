@@ -29,6 +29,7 @@ public class BorrowerEvaluationService {
     private final LendingSessionService sessionService;
     private final DroolsEvaluationService droolsService;
     private final AiRiskService aiRiskService;
+    private final HybridRiskDecisionService hybridRiskDecisionService;
     private final BorrowerSnapshotRepository snapshotRepository;
     private final BorrowerEvaluationRepository evaluationRepository;
     private final BorrowerIdentityService borrowerIdentityService;
@@ -40,6 +41,7 @@ public class BorrowerEvaluationService {
     public BorrowerEvaluationService(LendingSessionService sessionService,
                                      DroolsEvaluationService droolsService,
                                      AiRiskService aiRiskService,
+                                     HybridRiskDecisionService hybridRiskDecisionService,
                                      BorrowerSnapshotRepository snapshotRepository,
                                      BorrowerEvaluationRepository evaluationRepository,
                                      BorrowerIdentityService borrowerIdentityService,
@@ -50,6 +52,7 @@ public class BorrowerEvaluationService {
         this.sessionService = sessionService;
         this.droolsService = droolsService;
         this.aiRiskService = aiRiskService;
+        this.hybridRiskDecisionService = hybridRiskDecisionService;
         this.snapshotRepository = snapshotRepository;
         this.evaluationRepository = evaluationRepository;
         this.borrowerIdentityService = borrowerIdentityService;
@@ -115,17 +118,33 @@ public class BorrowerEvaluationService {
         }
 
         var aiResult = aiRiskService.evaluate(fact);
+        EvaluationResult finalResult = hybridRiskDecisionService.apply(result, aiResult);
 
         BorrowerEvaluation evaluation = BorrowerEvaluation.builder()
                 .loanId(req.getLoanId())
                 .sessionId(req.getSessionId())
-                .decision(result.getDecision())
-                .riskLevel(result.getRiskLevel())
-                .investmentAmount(result.getInvestmentAmount())
+                .droolsDecision(result.getDecision())
+                .droolsRiskLevel(result.getRiskLevel())
+                .droolsInvestmentAmount(result.getInvestmentAmount())
+                .decision(finalResult.getDecision())
+                .riskLevel(finalResult.getRiskLevel())
+                .investmentAmount(finalResult.getInvestmentAmount())
                 .ruleName(result.getRuleName())
                 .ruleCode(result.getRuleCode())
-                .reason(result.getReason())
+                .reason(finalResult.getReason())
                 .aiRiskScore(aiResult.getRiskScore())
+                .aiRiskLevel(aiResult.getRiskLevel())
+                .aiRecommendation(aiResult.getRecommendation())
+                .aiConfidence(aiResult.getConfidence())
+                .aiMaximumAmount(aiResult.getMaximumRecommendedAmount())
+                .aiRationale(aiResult.getRationale())
+                .aiConcerns(toJson(aiResult.getConcerns()))
+                .aiPositiveFactors(toJson(aiResult.getPositiveFactors()))
+                .aiProvider(aiResult.getProvider())
+                .aiModel(aiResult.getModel())
+                .aiPromptVersion(aiResult.getPromptVersion())
+                .aiStatus(aiResult.getStatus())
+                .aiLatencyMs(aiResult.getLatencyMs())
                 .engineVersion(engineVersion)
                 .build();
 
@@ -135,18 +154,28 @@ public class BorrowerEvaluationService {
                 "BORROWER_EVALUATED",
                 req.getSessionId(),
                 req.getLoanId(),
-                "Decision=" + result.getDecision() + " Rule=" + result.getRuleName() + " Engine=" + engineVersion);
+                "Decision=" + finalResult.getDecision() + " DroolsDecision=" + result.getDecision() + " Rule=" + result.getRuleName() + " Engine=" + engineVersion);
 
         return BorrowerEvaluateResponse.builder()
                 .loanId(req.getLoanId())
                 .sessionId(req.getSessionId())
-                .decision(result.getDecision())
-                .riskLevel(result.getRiskLevel())
-                .investmentAmount(result.getInvestmentAmount())
+                .decision(finalResult.getDecision())
+                .riskLevel(finalResult.getRiskLevel())
+                .investmentAmount(finalResult.getInvestmentAmount())
                 .rule(responseRule)
-                .reason(result.getReason())
+                .reason(finalResult.getReason())
                 .evaluationId(evaluation.getId())
                 .build();
+    }
+
+    private String toJson(Object value) {
+        if (value == null) return null;
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            log.warn("Could not serialize AI assessment metadata: {}", e.getMessage());
+            return null;
+        }
     }
 
     private BorrowerProfile resolveProfileAndSaveSnapshot(BorrowerEvaluateRequest req) {

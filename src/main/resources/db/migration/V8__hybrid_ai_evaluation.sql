@@ -1,0 +1,16 @@
+ALTER TABLE borrower_evaluation
+    ADD COLUMN drools_decision VARCHAR(20) NULL AFTER session_id,
+    ADD COLUMN drools_risk_level VARCHAR(20) NULL AFTER drools_decision,
+    ADD COLUMN drools_investment_amount DECIMAL(12,2) NULL AFTER drools_risk_level,
+    ADD COLUMN ai_risk_level VARCHAR(20) NULL AFTER ai_risk_score,
+    ADD COLUMN ai_recommendation VARCHAR(20) NULL AFTER ai_risk_level,
+    ADD COLUMN ai_confidence DOUBLE NULL AFTER ai_recommendation,
+    ADD COLUMN ai_maximum_amount DECIMAL(12,2) NULL AFTER ai_confidence,
+    ADD COLUMN ai_rationale TEXT NULL AFTER ai_maximum_amount,
+    ADD COLUMN ai_concerns JSON NULL AFTER ai_rationale,
+    ADD COLUMN ai_positive_factors JSON NULL AFTER ai_concerns,
+    ADD COLUMN ai_provider VARCHAR(30) NULL AFTER ai_positive_factors,
+    ADD COLUMN ai_model VARCHAR(100) NULL AFTER ai_provider,
+    ADD COLUMN ai_prompt_version VARCHAR(30) NULL AFTER ai_model,
+    ADD COLUMN ai_status VARCHAR(30) NULL AFTER ai_prompt_version,
+    ADD COLUMN ai_latency_ms BIGINT NULL AFTER ai_status;
