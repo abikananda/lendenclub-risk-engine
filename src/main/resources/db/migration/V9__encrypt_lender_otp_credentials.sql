@@ -1,0 +1,2 @@
+ALTER TABLE lender
+    MODIFY COLUMN otp_password VARCHAR(512) NOT NULL;
