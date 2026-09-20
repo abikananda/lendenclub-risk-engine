@@ -3,6 +3,7 @@ package com.abikananda.lendenclub.entity;
 import com.abikananda.lendenclub.domain.InvestmentStatus;
 import com.abikananda.lendenclub.domain.LendingRule;
 import com.abikananda.lendenclub.domain.LendingRuleListConverter;
+import com.abikananda.lendenclub.security.OtpPasswordConverter;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -39,7 +40,8 @@ public class Lender {
     @Column(name = "otp_username", nullable = false, unique = true, length = 50)
     private String otpUsername;
 
-    @Column(name = "otp_password", nullable = false, length = 100)
+    @Convert(converter = OtpPasswordConverter.class)
+    @Column(name = "otp_password", nullable = false, length = 512)
     private String otpPassword;
 
     @Column(name = "active", nullable = false)

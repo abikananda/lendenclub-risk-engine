@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS lender (
     username VARCHAR(50) NOT NULL UNIQUE,
     mobile_number VARCHAR(15) NOT NULL UNIQUE,
     otp_username VARCHAR(50) NOT NULL UNIQUE,
-    otp_password VARCHAR(100) NOT NULL,
+    otp_password VARCHAR(512) NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     lending_rules TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

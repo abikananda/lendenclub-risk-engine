@@ -30,7 +30,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     private final ObjectMapper objectMapper;
 
     public ApiKeyAuthenticationFilter(
-            @Value("${backend.auth.enabled:false}") boolean enabled,
+            @Value("${backend.auth.enabled:true}") boolean enabled,
             @Value("${backend.auth.api-key:}") String expectedApiKey,
             @Value("${backend.auth.header:X-API-Key}") String headerName,
             ObjectMapper objectMapper) {

@@ -21,6 +21,7 @@ import com.abikananda.lendenclub.service.LendingSessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
@@ -32,6 +33,7 @@ import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest
@@ -50,10 +52,16 @@ class MySqlPersistenceIntegrationTest {
         registry.add("spring.datasource.password", MYSQL::getPassword);
         registry.add("spring.flyway.baseline-on-migrate", () -> false);
         registry.add("server.address", () -> "0.0.0.0");
+        registry.add("backend.auth.api-key", () -> "integration-test-api-key");
+        registry.add("otp.credentials.encryption-key",
+                () -> "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
     }
 
     @Autowired
     private LenderRepository lenderRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private LendingSessionService sessionService;
@@ -91,6 +99,11 @@ class MySqlPersistenceIntegrationTest {
                 .otpPassword("test-password")
                 .active(true)
                 .build());
+
+        String storedOtpPassword = jdbcTemplate.queryForObject(
+                "SELECT otp_password FROM lender WHERE id = ?", String.class, lender.getId());
+        assertNotNull(storedOtpPassword);
+        assertTrue(storedOtpPassword.startsWith("enc:v1:"));
 
         LendingSession session = sessionService.createSession(lender);
         assertNotNull(session.getSessionId());
