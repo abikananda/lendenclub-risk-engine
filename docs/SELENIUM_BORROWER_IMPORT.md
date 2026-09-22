@@ -16,14 +16,23 @@ Configure the Selenium database and enable the one-time startup import:
 ```powershell
 $env:SELENIUM_BORROWER_IMPORT_ENABLED="true"
 $env:SELENIUM_BORROWER_IMPORT_RUN_ON_STARTUP="true"
-$env:SELENIUM_SOURCE_DB_URL="jdbc:mysql://localhost:3306/pfmp?useSSL=false&serverTimezone=Asia/Kolkata"
-$env:SELENIUM_SOURCE_DB_USERNAME="root"
-$env:SELENIUM_SOURCE_DB_PASSWORD = Read-Host "Selenium database password" -MaskInput
+$env:SELENIUM_BORROWER_IMPORT_DATASOURCE_URL="jdbc:mysql://localhost:3306/pfmp?useSSL=false&serverTimezone=Asia/Kolkata&allowPublicKeyRetrieval=true"
+$env:SELENIUM_BORROWER_IMPORT_DATASOURCE_USERNAME="borrower_migration_reader"
+$env:SELENIUM_BORROWER_IMPORT_DATASOURCE_PASSWORD = Read-Host "Selenium database password" -MaskInput
+$env:SELENIUM_BORROWER_IMPORT_DATASOURCE_DRIVER="com.mysql.cj.jdbc.Driver"
 mvn spring-boot:run
 ```
 
+Use a source database account that has only `SELECT` permission on `pfmp.borrower_loans`.
+The importer never needs insert, update, delete, or schema permissions on the Selenium database.
+
 The application logs the source-row, profile, snapshot, linked, existing, and skipped counts.
 After a successful migration, set both import flags to `false` for normal application startup.
+
+```powershell
+$env:SELENIUM_BORROWER_IMPORT_ENABLED="false"
+$env:SELENIUM_BORROWER_IMPORT_RUN_ON_STARTUP="false"
+```
 
 Running the import again is safe and provides a useful verification that no duplicate snapshots
 are created.
