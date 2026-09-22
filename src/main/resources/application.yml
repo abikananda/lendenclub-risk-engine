@@ -54,6 +54,15 @@ npa-import:
     password: ${NPA_SOURCE_DB_PASSWORD:${DB_PASSWORD:}}
     driver-class-name: ${NPA_SOURCE_DB_DRIVER:com.mysql.cj.jdbc.Driver}
 
+selenium-borrower-import:
+  enabled: ${SELENIUM_BORROWER_IMPORT_ENABLED:false}
+  run-on-startup: ${SELENIUM_BORROWER_IMPORT_RUN_ON_STARTUP:false}
+  datasource:
+    url: ${SELENIUM_BORROWER_IMPORT_DATASOURCE_URL:}
+    username: ${SELENIUM_BORROWER_IMPORT_DATASOURCE_USERNAME:}
+    password: ${SELENIUM_BORROWER_IMPORT_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SELENIUM_BORROWER_IMPORT_DATASOURCE_DRIVER:com.mysql.cj.jdbc.Driver}
+
 otp:
   credentials:
     encryption-key: ${OTP_CREDENTIAL_ENCRYPTION_KEY:}
