@@ -29,11 +29,29 @@ public class SeleniumBorrowerImportUtility {
     private static final String MIGRATION_SESSION = "SELENIUM-MIGRATION";
 
     static final String SOURCE_QUERY = """
-            SELECT id, loanId, creditScore, lendenScore, income, loanAmount, borrowerType,
-                   interestRate, name, age, lendingAmount, tenure, user, created_date
-            FROM borrower_loans
-            WHERE name IS NOT NULL AND TRIM(name) <> ''
-            ORDER BY id
+            SELECT bl.id, bl.loanId, bl.creditScore, bl.lendenScore, bl.income, bl.loanAmount,
+                   bl.borrowerType, bl.interestRate, bl.name, bl.age, bl.lendingAmount,
+                   bl.tenure, bl.user, bl.created_date, investment.borrower_gender
+            FROM borrower_loans bl
+            LEFT JOIN (
+                SELECT TRIM(loan_id) AS loan_id,
+                       LOWER(TRIM(borrower_name)) AS normalized_borrower_name,
+                       CASE
+                           WHEN COUNT(DISTINCT UPPER(TRIM(NULLIF(borrower_gender, '-')))) = 1
+                           THEN MAX(NULLIF(TRIM(borrower_gender), '-'))
+                           ELSE NULL
+                       END AS borrower_gender
+                FROM invested_loans
+                WHERE loan_id IS NOT NULL
+                  AND TRIM(loan_id) <> ''
+                  AND borrower_name IS NOT NULL
+                  AND TRIM(borrower_name) <> ''
+                GROUP BY TRIM(loan_id), LOWER(TRIM(borrower_name))
+            ) investment
+              ON investment.loan_id = TRIM(bl.loanId)
+             AND investment.normalized_borrower_name = LOWER(TRIM(bl.name))
+            WHERE bl.name IS NOT NULL AND TRIM(bl.name) <> ''
+            ORDER BY bl.id
             """;
 
     private final JdbcTemplate source;
@@ -63,16 +81,24 @@ public class SeleniumBorrowerImportUtility {
         int skippedRows = 0;
 
         for (SourceBorrower row : rows) {
-            if (row.loanId() == null || row.loanId().isBlank()) {
+            if (!hasRequiredIdentity(row)) {
                 skippedRows++;
                 continue;
             }
 
+            String loanId = row.loanId().trim();
+            List<BorrowerSnapshot> existing = snapshots.findByLoanId(loanId);
+            if (!existing.isEmpty() && existing.stream().allMatch(snapshot -> snapshot.getBorrowerProfile() != null)) {
+                existingSnapshots++;
+                existing.stream().map(BorrowerSnapshot::getBorrowerProfile)
+                        .map(BorrowerProfile::getId).forEach(matchedProfiles::add);
+                continue;
+            }
+
             BorrowerProfile profile = identities.resolveOrCreateAt(
-                    row.name(), null, row.borrowerType(), row.age(), row.createdAt());
+                    row.name(), row.gender(), row.borrowerType(), row.age(), row.createdAt());
             matchedProfiles.add(profile.getId());
             boolean repeated = !encounteredProfiles.add(profile.getId());
-            List<BorrowerSnapshot> existing = snapshots.findByLoanId(row.loanId().trim());
             if (!existing.isEmpty()) {
                 boolean linked = false;
                 for (BorrowerSnapshot snapshot : existing) {
@@ -100,6 +126,18 @@ public class SeleniumBorrowerImportUtility {
         return result;
     }
 
+    private boolean hasRequiredIdentity(SourceBorrower row) {
+        return row.loanId() != null && !row.loanId().isBlank()
+                && present(row.name())
+                && present(row.gender())
+                && present(row.borrowerType())
+                && row.age() != null && row.age() > 0;
+    }
+
+    private boolean present(String value) {
+        return value != null && !value.isBlank() && !"-".equals(value.trim());
+    }
+
     private BorrowerSnapshot toSnapshot(SourceBorrower row, BorrowerProfile profile, boolean repeated) {
         int tenure = positive(row.tenure(), 1);
         BigDecimal loanAmount = positive(row.loanAmount());
@@ -116,6 +154,7 @@ public class SeleniumBorrowerImportUtility {
                 .emi(loanAmount.divide(BigDecimal.valueOf(tenure), 2, RoundingMode.HALF_UP))
                 .age(positive(row.age(), 1))
                 .borrowerType(defaultText(row.borrowerType(), "UNKNOWN"))
+                .gender(row.gender().trim())
                 .repeated(repeated)
                 .rawPayload("{\"source\":\"selenium.borrower_loans\",\"sourceId\":" + row.sourceId() + "}")
                 .scrapedAt(row.createdAt() == null ? OffsetDateTime.now(ZoneOffset.UTC) : row.createdAt())
@@ -130,7 +169,8 @@ public class SeleniumBorrowerImportUtility {
                 rs.getString("name"), integer(rs, "age"), decimal(rs, "lendingAmount"),
                 integer(rs, "tenure"), rs.getString("user"),
                 rs.getTimestamp("created_date") == null ? null
-                        : rs.getTimestamp("created_date").toInstant().atOffset(ZoneOffset.UTC));
+                        : rs.getTimestamp("created_date").toInstant().atOffset(ZoneOffset.UTC),
+                rs.getString("borrower_gender"));
     }
 
     private BigDecimal decimal(ResultSet rs, String column) throws SQLException {
@@ -167,7 +207,7 @@ public class SeleniumBorrowerImportUtility {
     record SourceBorrower(long sourceId, String loanId, BigDecimal creditScore, BigDecimal lendenScore,
                           BigDecimal income, BigDecimal loanAmount, String borrowerType,
                           BigDecimal interestRate, String name, Integer age, BigDecimal lendingAmount,
-                          Integer tenure, String user, OffsetDateTime createdAt) { }
+                          Integer tenure, String user, OffsetDateTime createdAt, String gender) { }
 
     public record ImportResult(int sourceRows, int uniqueProfiles, int profilesCreated,
                                int snapshotsCreated, int snapshotsLinked,

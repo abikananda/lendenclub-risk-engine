@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
@@ -98,12 +97,13 @@ class BorrowerIdentityServiceTest {
     }
 
     @Test
-    void createsSeparateProfileWhenSameNameCandidatesAreAmbiguous() {
+    void reusesOldestCanonicalProfileWhenSameIdentityAlreadyHasDuplicates() {
         BorrowerProfileRepository repository = mock(BorrowerProfileRepository.class);
         BorrowerIdentityService service = service(repository);
         int birthYear = Year.now(ZoneOffset.UTC).getValue() - 30;
 
         BorrowerProfile first = BorrowerProfile.builder()
+                .id(10L)
                 .publicId("first")
                 .normalizedName("alex kumar")
                 .genderNormalized("male")
@@ -111,6 +111,7 @@ class BorrowerIdentityServiceTest {
                 .birthYearEstimate(birthYear)
                 .build();
         BorrowerProfile second = BorrowerProfile.builder()
+                .id(20L)
                 .publicId("second")
                 .normalizedName("alex kumar")
                 .genderNormalized("male")
@@ -119,14 +120,12 @@ class BorrowerIdentityServiceTest {
                 .build();
 
         when(repository.findByNormalizedName("alex kumar")).thenReturn(List.of(first, second));
+        when(repository.save(any(BorrowerProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         BorrowerProfile resolved = service.resolveOrCreate("Alex Kumar", "Male", "SALARIED", 30);
 
-        assertNotNull(resolved.getPublicId());
-        assertNotSame(first, resolved);
-        assertNotSame(second, resolved);
-        assertEquals(BigDecimal.ZERO, resolved.getTotalLent());
-        assertEquals(0L, resolved.getSuccessfulInvestmentCount());
+        assertSame(first, resolved);
+        assertEquals("first", resolved.getPublicId());
     }
 
     @SuppressWarnings("unchecked")

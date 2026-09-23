@@ -71,8 +71,18 @@ public class BorrowerIdentityService {
         }
 
         if (candidates.size() > 1) {
-            log.warn("Ambiguous borrower identity name={} gender={} borrowerType={} estimatedBirthYear={} candidateCount={}; creating separate profile",
-                    borrowerName, normalizedGender, normalizedBorrowerType, estimatedBirthYear, candidates.size());
+            BorrowerProfile canonical = candidates.stream()
+                    .filter(profile -> profile.getId() != null)
+                    .min(java.util.Comparator.comparing(BorrowerProfile::getId))
+                    .orElse(candidates.get(0));
+            log.warn("Ambiguous borrower identity name={} gender={} borrowerType={} estimatedBirthYear={} candidateCount={}; reusing canonicalProfileId={} instead of creating another profile",
+                    borrowerName, normalizedGender, normalizedBorrowerType, estimatedBirthYear,
+                    candidates.size(), canonical.getId());
+            if (canonical.getLastSeenAt() == null || seenAt.isAfter(canonical.getLastSeenAt())) {
+                canonical.setDisplayName(borrowerName.trim());
+                canonical.setLastSeenAt(seenAt);
+            }
+            return repository.save(canonical);
         }
 
         return profileCreator.create(publicId -> BorrowerProfile.builder()

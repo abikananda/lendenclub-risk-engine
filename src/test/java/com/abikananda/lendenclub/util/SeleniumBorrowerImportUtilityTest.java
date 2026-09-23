@@ -19,7 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class SeleniumBorrowerImportUtilityTest {
@@ -38,7 +40,7 @@ class SeleniumBorrowerImportUtilityTest {
                 org.mockito.ArgumentMatchers.<RowMapper<SeleniumBorrowerImportUtility.SourceBorrower>>any()))
                 .thenReturn(List.of(row));
         when(profiles.count()).thenReturn(2L, 3L);
-        when(identities.resolveOrCreateAt("Jane Doe", null, "SALARIED", 35, row.createdAt())).thenReturn(profile);
+        when(identities.resolveOrCreateAt("Jane Doe", "FEMALE", "SALARIED", 35, row.createdAt())).thenReturn(profile);
         when(snapshots.findByLoanId("LN-1001")).thenReturn(List.of());
 
         var result = utility.sync();
@@ -52,6 +54,7 @@ class SeleniumBorrowerImportUtilityTest {
         BorrowerSnapshot saved = captor.getValue();
         assertEquals("LN-1001", saved.getLoanId());
         assertEquals("Jane Doe", saved.getBorrowerName());
+        assertEquals("FEMALE", saved.getGender());
         assertSame(profile, saved.getBorrowerProfile());
         assertEquals(new BigDecimal("12000"), saved.getLoanAmount());
         assertEquals(new BigDecimal("3000.00"), saved.getEmi());
@@ -66,7 +69,7 @@ class SeleniumBorrowerImportUtilityTest {
                 org.mockito.ArgumentMatchers.<RowMapper<SeleniumBorrowerImportUtility.SourceBorrower>>any()))
                 .thenReturn(List.of(sourceRow()));
         when(profiles.count()).thenReturn(3L, 3L);
-        when(identities.resolveOrCreateAt(any(), eq(null), any(), any(), any())).thenReturn(profile);
+        when(identities.resolveOrCreateAt(any(), eq("FEMALE"), any(), any(), any())).thenReturn(profile);
         when(snapshots.findByLoanId("LN-1001")).thenReturn(List.of(existing));
 
         var result = utility.sync();
@@ -77,11 +80,60 @@ class SeleniumBorrowerImportUtilityTest {
         verify(snapshots).save(existing);
     }
 
+    @Test
+    void rerunDoesNotResolveIdentityWhenSnapshotIsAlreadyLinked() {
+        BorrowerProfile profile = BorrowerProfile.builder().id(10L).publicId("BRW-ABC").build();
+        BorrowerSnapshot existing = BorrowerSnapshot.builder()
+                .loanId("LN-1001").borrowerProfile(profile).build();
+        when(source.query(eq(SeleniumBorrowerImportUtility.SOURCE_QUERY),
+                org.mockito.ArgumentMatchers.<RowMapper<SeleniumBorrowerImportUtility.SourceBorrower>>any()))
+                .thenReturn(List.of(sourceRow()));
+        when(profiles.count()).thenReturn(3L, 3L);
+        when(snapshots.findByLoanId("LN-1001")).thenReturn(List.of(existing));
+
+        var result = utility.sync();
+
+        assertEquals(1, result.existingSnapshots());
+        assertEquals(0, result.profilesCreated());
+        verifyNoInteractions(identities);
+        verify(snapshots, never()).save(any());
+    }
+
+    @Test
+    void skipsRowsWithIncompleteIdentityFields() {
+        SourceBorrower valid = sourceRow();
+        List<SeleniumBorrowerImportUtility.SourceBorrower> invalid = List.of(
+                copyIdentity(valid, null, valid.gender(), valid.borrowerType(), valid.age()),
+                copyIdentity(valid, valid.name(), null, valid.borrowerType(), valid.age()),
+                copyIdentity(valid, valid.name(), valid.gender(), "-", valid.age()),
+                copyIdentity(valid, valid.name(), valid.gender(), valid.borrowerType(), null));
+        when(source.query(eq(SeleniumBorrowerImportUtility.SOURCE_QUERY),
+                org.mockito.ArgumentMatchers.<RowMapper<SeleniumBorrowerImportUtility.SourceBorrower>>any()))
+                .thenReturn(invalid);
+        when(profiles.count()).thenReturn(3L, 3L);
+
+        var result = utility.sync();
+
+        assertEquals(4, result.skippedRows());
+        assertEquals(0, result.profilesCreated());
+        assertEquals(0, result.snapshotsCreated());
+        verifyNoInteractions(identities, snapshots);
+    }
+
+    private SeleniumBorrowerImportUtility.SourceBorrower copyIdentity(
+            SeleniumBorrowerImportUtility.SourceBorrower row, String name, String gender,
+            String borrowerType, Integer age) {
+        return new SeleniumBorrowerImportUtility.SourceBorrower(row.sourceId(), row.loanId(),
+                row.creditScore(), row.lendenScore(), row.income(), row.loanAmount(), borrowerType,
+                row.interestRate(), name, age, row.lendingAmount(), row.tenure(), row.user(),
+                row.createdAt(), gender);
+    }
+
     private SeleniumBorrowerImportUtility.SourceBorrower sourceRow() {
         return new SeleniumBorrowerImportUtility.SourceBorrower(1L, " LN-1001 ",
                 new BigDecimal("701"), new BigDecimal("800"), new BigDecimal("50000"),
                 new BigDecimal("12000"), "SALARIED", new BigDecimal("36.48"),
                 "Jane Doe", 35, new BigDecimal("1000"), 4, "9090000000",
-                OffsetDateTime.parse("2026-01-01T10:00:00Z"));
+                OffsetDateTime.parse("2026-01-01T10:00:00Z"), "FEMALE");
     }
 }
