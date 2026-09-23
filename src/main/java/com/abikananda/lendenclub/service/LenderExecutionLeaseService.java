@@ -2,6 +2,7 @@ package com.abikananda.lendenclub.service;
 
 import com.abikananda.lendenclub.entity.Lender;
 import com.abikananda.lendenclub.exception.LenderExecutionLockedException;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -19,7 +20,7 @@ public class LenderExecutionLeaseService {
     private final Duration leaseDuration;
 
     public LenderExecutionLeaseService(
-            JdbcTemplate jdbcTemplate,
+            @Qualifier("targetJdbcTemplate") JdbcTemplate jdbcTemplate,
             @Value("${lending.execution-lease-minutes:180}") long leaseMinutes) {
         this.jdbcTemplate = jdbcTemplate;
         this.leaseDuration = Duration.ofMinutes(leaseMinutes);

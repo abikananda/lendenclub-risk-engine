@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,7 +21,7 @@ public class LegacyOtpCredentialMigration implements ApplicationRunner {
     private final JdbcTemplate jdbcTemplate;
     private final CredentialEncryptionService encryptionService;
 
-    public LegacyOtpCredentialMigration(JdbcTemplate jdbcTemplate,
+    public LegacyOtpCredentialMigration(@Qualifier("targetJdbcTemplate") JdbcTemplate jdbcTemplate,
                                         CredentialEncryptionService encryptionService) {
         this.jdbcTemplate = jdbcTemplate;
         this.encryptionService = encryptionService;
