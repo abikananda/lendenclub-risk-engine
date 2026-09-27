@@ -9,6 +9,7 @@ import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.entity.Lender;
 import com.abikananda.lendenclub.entity.LendingSession;
+import com.abikananda.lendenclub.exception.InvestmentConflictException;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
 import com.abikananda.lendenclub.repository.BorrowerProfileRepository;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
@@ -31,6 +32,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -153,6 +155,18 @@ class MySqlPersistenceIntegrationTest {
 
         investmentService.recordStatus(request);
         investmentService.recordStatus(request);
+
+        LendingSession laterSession = sessionService.createSession(lender);
+        BorrowerEvaluateResponse duplicateAcrossSessions = borrowerEvaluationService.evaluateSpecificRule(
+                borrowerRequest(laterSession.getSessionId(), "LOAN-EVAL-MATCH", 620, 760, "93566", "5500"),
+                "Bulk Lenders");
+        assertEquals(LendingDecision.SKIP, duplicateAcrossSessions.getDecision());
+        assertEquals(1, evaluationRepository.findByLoanId("LOAN-EVAL-MATCH").size());
+
+        assertThrows(InvestmentConflictException.class, () -> investmentService.recordStatus(
+                InvestmentStatusRequest.builder().sessionId(laterSession.getSessionId())
+                        .loanId("LOAN-EVAL-MATCH").investmentAmount(new BigDecimal("250.00"))
+                        .status(InvestmentStatus.SUCCESS).build()));
 
         assertEquals(1, investmentRepository.countBySessionId(session.getSessionId()));
 

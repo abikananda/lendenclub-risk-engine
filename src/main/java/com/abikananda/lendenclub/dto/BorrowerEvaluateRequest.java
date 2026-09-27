@@ -39,7 +39,8 @@ public class BorrowerEvaluateRequest {
     @NotNull @Positive
     private Integer tenure;
 
-    @NotNull @Positive
+    // Retained for backward compatibility. The platform does not provide EMI;
+    // risk evaluation derives monthly principal payment from loanAmount / tenure.
     private BigDecimal emi;
 
     @NotNull

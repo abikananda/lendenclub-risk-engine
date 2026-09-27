@@ -18,8 +18,14 @@ function boolean isLoanTooLargeForIncome(BigDecimal loanAmount, BigDecimal incom
     return loanAmount.compareTo(income.multiply(new BigDecimal("0.50"))) > 0;
 }
 
-function boolean isEmiTooHigh(BigDecimal emi, BigDecimal income) {
-    return emi.compareTo(income.multiply(new BigDecimal("0.20"))) > 0;
+function boolean isEstimatedMonthlyPaymentTooHigh(BigDecimal loanAmount, int tenure,
+                                                   BigDecimal income, BigDecimal maxRatio) {
+    if (loanAmount == null || income == null || maxRatio == null || tenure <= 0 || income.signum() <= 0) {
+        return true;
+    }
+    return loanAmount.compareTo(
+            income.multiply(maxRatio).multiply(BigDecimal.valueOf(tenure))
+    ) > 0;
 }
 
 function boolean isRatioAtMost(BigDecimal numerator, BigDecimal denominator, BigDecimal maxRatio) {
@@ -74,17 +80,18 @@ rule "Reject - Loan Too Large For Income"
         evaluationResult.setInvestmentAmount(BigDecimal.ZERO);
 end
 
-rule "Reject - EMI Too High"
+rule "Reject - Monthly Payment Too High"
     salience 80
     when
         $b : BorrowerFact()
-        eval(isEmiTooHigh($b.getEmi(), $b.getIncome()))
+        eval(isEstimatedMonthlyPaymentTooHigh(
+                $b.getLoanAmount(), $b.getTenure(), $b.getIncome(), new BigDecimal("0.20")))
     then
         evaluationResult.setDecision(LendingDecision.REJECT);
         evaluationResult.setRiskLevel(RiskLevel.HIGH);
-        evaluationResult.setRuleName("Reject - EMI Too High");
+        evaluationResult.setRuleName("Reject - Monthly Payment Too High");
         evaluationResult.setRuleCode("REJ_FOIR");
-        evaluationResult.setReason("EMI exceeds 20% of monthly income");
+        evaluationResult.setReason("Estimated monthly principal payment exceeds 20% of monthly income");
         evaluationResult.setInvestmentAmount(BigDecimal.ZERO);
 end
 
@@ -404,6 +411,7 @@ end
 rule "Daily Repayment Lenders"
 when
     $b : BorrowerFact(
+        repaymentFrequency == "DAILY",
         creditScore >= 730,
         lendenScore >= 770,
         income >= new BigDecimal("50000"),
@@ -426,6 +434,7 @@ end
 rule "Monthly Repayment - High Risk"
 when
     $b : BorrowerFact(
+        repaymentFrequency == "MONTHLY",
         borrowerType == "SALARIED",
         creditScore >= 600,
         lendenScore >= 720,

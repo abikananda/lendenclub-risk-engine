@@ -21,6 +21,7 @@ public class BorrowerFact {
     private BigDecimal emi;
     private Integer age;
     private String borrowerType;
+    private String repaymentFrequency;
     private Boolean repeated;
     private Boolean trusted;
 }

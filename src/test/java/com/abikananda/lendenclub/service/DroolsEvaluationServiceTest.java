@@ -139,4 +139,32 @@ class DroolsEvaluationServiceTest {
         assertEquals("Repeated Lenders - High Risk", res.getRuleName());
         assertEquals(new BigDecimal("1000.00"), res.getInvestmentAmount());
     }
+
+    @Test
+    void repaymentRulesRequireMatchingFrequency() {
+        BorrowerFact fact = BorrowerFact.builder().loanId("FREQUENCY-1")
+                .creditScore(760).lendenScore(800).income(new BigDecimal("80000"))
+                .loanAmount(new BigDecimal("10000")).interestRate(new BigDecimal("25"))
+                .tenure(6).age(35).borrowerType("SALARIED").build();
+
+        fact.setRepaymentFrequency("MONTHLY");
+        assertNull(droolsService.evaluateSpecificRule(fact, "LS-TEST", "Daily Repayment Lenders").getDecision());
+        assertEquals(LendingDecision.INVEST,
+                droolsService.evaluateSpecificRule(fact, "LS-TEST", "Monthly Repayment - High Risk").getDecision());
+
+        fact.setRepaymentFrequency("DAILY");
+        assertEquals(LendingDecision.INVEST,
+                droolsService.evaluateSpecificRule(fact, "LS-TEST", "Daily Repayment Lenders").getDecision());
+        assertNull(droolsService.evaluateSpecificRule(fact, "LS-TEST", "Monthly Repayment - High Risk").getDecision());
+    }
+
+    @Test
+    void highEmiRejectionUsesLoanAndTenureRatherThanProvidedEmi() {
+        BorrowerFact fact = BorrowerFact.builder().loanId("EMI-1")
+                .creditScore(700).lendenScore(800).income(new BigDecimal("10000"))
+                .loanAmount(new BigDecimal("5000")).interestRate(new BigDecimal("25"))
+                .tenure(2).emi(BigDecimal.ONE).age(35).borrowerType("SALARIED").build();
+        assertEquals(LendingDecision.REJECT,
+                droolsService.evaluateSpecificRule(fact, "LS-TEST", "Reject - Monthly Payment Too High").getDecision());
+    }
 }

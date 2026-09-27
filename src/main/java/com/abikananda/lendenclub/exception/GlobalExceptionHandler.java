@@ -37,6 +37,11 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", ex.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(InvestmentConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvestmentConflict(InvestmentConflictException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.CONFLICT, "INVESTMENT_CONFLICT", ex.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(RuleEvaluationException.class)
     public ResponseEntity<ApiErrorResponse> handleRuleEvaluation(RuleEvaluationException ex, HttpServletRequest request) {
         log.error("Rule evaluation failed loanId={} rule={}", ex.getLoanId(), ex.getRuleName(), ex);

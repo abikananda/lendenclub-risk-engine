@@ -7,7 +7,9 @@ import com.abikananda.lendenclub.dto.InvestmentSummaryResponse;
 import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.Investment;
 import com.abikananda.lendenclub.entity.LendingSession;
+import com.abikananda.lendenclub.exception.InvestmentConflictException;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
+import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
 import com.abikananda.lendenclub.repository.InvestmentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,12 +68,19 @@ public class InvestmentService {
             Optional<Investment> existing = investmentRepository.findByExternalInvestmentId(req.getExternalInvestmentId());
             if (existing.isPresent()) {
                 Investment previous = existing.get();
-                if (!previous.getSessionId().equals(req.getSessionId())) {
-                    throw new IllegalStateException("External investment ID already belongs to a different session");
+                if (!previous.getSessionId().equals(req.getSessionId())
+                        || !previous.getLoanId().equals(req.getLoanId())) {
+                    throw new InvestmentConflictException("External investment ID already belongs to a different session or loan");
                 }
                 log.info("Idempotent duplicate ignored for externalInvestmentId={}", req.getExternalInvestmentId());
                 return mapToResponse(previous);
             }
+        }
+
+        if (req.getStatus() == InvestmentStatus.SUCCESS
+                && investmentRepository.existsByLender_IdAndLoanIdAndStatus(
+                        session.getLender().getId(), req.getLoanId(), InvestmentStatus.SUCCESS)) {
+            throw new InvestmentConflictException("Loan already invested by this lender");
         }
 
         BorrowerProfile borrowerProfile = snapshotRepository

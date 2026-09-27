@@ -2,6 +2,9 @@ package com.abikananda.lendenclub.service;
 
 import com.abikananda.lendenclub.domain.BorrowerFact;
 import com.abikananda.lendenclub.domain.EvaluationResult;
+import com.abikananda.lendenclub.domain.LendingDecision;
+import com.abikananda.lendenclub.domain.InvestmentStatus;
+import com.abikananda.lendenclub.domain.RiskLevel;
 import com.abikananda.lendenclub.domain.LendingRule;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateResponse;
@@ -9,6 +12,7 @@ import com.abikananda.lendenclub.entity.BorrowerEvaluation;
 import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
+import com.abikananda.lendenclub.repository.InvestmentRepository;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -19,7 +23,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class BorrowerEvaluationService {
@@ -32,6 +39,7 @@ public class BorrowerEvaluationService {
     private final HybridRiskDecisionService hybridRiskDecisionService;
     private final BorrowerSnapshotRepository snapshotRepository;
     private final BorrowerEvaluationRepository evaluationRepository;
+    private final InvestmentRepository investmentRepository;
     private final BorrowerIdentityService borrowerIdentityService;
     private final TrustedBorrowerService trustedBorrowerService;
     private final AuditService auditService;
@@ -44,6 +52,7 @@ public class BorrowerEvaluationService {
                                      HybridRiskDecisionService hybridRiskDecisionService,
                                      BorrowerSnapshotRepository snapshotRepository,
                                      BorrowerEvaluationRepository evaluationRepository,
+                                     InvestmentRepository investmentRepository,
                                      BorrowerIdentityService borrowerIdentityService,
                                      TrustedBorrowerService trustedBorrowerService,
                                      AuditService auditService,
@@ -55,6 +64,7 @@ public class BorrowerEvaluationService {
         this.hybridRiskDecisionService = hybridRiskDecisionService;
         this.snapshotRepository = snapshotRepository;
         this.evaluationRepository = evaluationRepository;
+        this.investmentRepository = investmentRepository;
         this.borrowerIdentityService = borrowerIdentityService;
         this.trustedBorrowerService = trustedBorrowerService;
         this.auditService = auditService;
@@ -75,7 +85,43 @@ public class BorrowerEvaluationService {
     }
 
     private BorrowerEvaluateResponse evaluateAndPersist(BorrowerEvaluateRequest req, String ruleName) {
-        sessionService.validateAndTouchSession(req.getSessionId());
+        var session = sessionService.validateAndTouchSession(req.getSessionId());
+
+        if (investmentRepository.existsByLender_IdAndLoanIdAndStatus(
+                session.getLender().getId(), req.getLoanId(), InvestmentStatus.SUCCESS)) {
+            return BorrowerEvaluateResponse.builder()
+                    .loanId(req.getLoanId()).sessionId(req.getSessionId())
+                    .decision(LendingDecision.SKIP).riskLevel(RiskLevel.UNKNOWN)
+                    .investmentAmount(BigDecimal.ZERO)
+                    .reason("Loan already invested by this lender")
+                    .build();
+        }
+
+        var previousApproval = evaluationRepository
+                .findFirstBySessionIdAndLoanIdAndDecisionOrderByEvaluatedAtDesc(
+                        req.getSessionId(), req.getLoanId(), LendingDecision.INVEST);
+        if (previousApproval.isPresent()) {
+            BorrowerEvaluation approved = previousApproval.orElseThrow();
+            log.info("sessionId={} loanId={} Skipping duplicate rule evaluation; already approved by rule={}",
+                    req.getSessionId(), req.getLoanId(), approved.getRuleCode());
+            auditService.logEvent(
+                    "BORROWER_DUPLICATE_APPROVAL_SKIPPED",
+                    req.getSessionId(),
+                    req.getLoanId(),
+                    "Already approved by rule=" + approved.getRuleCode()
+                            + " evaluationId=" + approved.getId());
+            return BorrowerEvaluateResponse.builder()
+                    .loanId(req.getLoanId())
+                    .sessionId(req.getSessionId())
+                    .decision(LendingDecision.SKIP)
+                    .riskLevel(approved.getRiskLevel())
+                    .investmentAmount(BigDecimal.ZERO)
+                    .rule(approved.getRuleCode())
+                    .reason("Loan was already approved in this session by rule " + approved.getRuleCode())
+                    .evaluationId(approved.getId())
+                    .build();
+        }
+
         BorrowerProfile profile = resolveProfileAndSaveSnapshot(req);
 
         boolean trusted = isTrustedRule(ruleName)
@@ -194,12 +240,12 @@ public class BorrowerEvaluationService {
                     .loanAmount(req.getLoanAmount())
                     .interestRate(req.getInterestRate())
                     .tenureMonths(req.getTenure())
-                    .emi(req.getEmi())
+                    .emi(estimatedMonthlyPayment(req))
                     .age(req.getAge())
                     .borrowerType(req.getBorrowerType())
                     .repeated(req.getRepeated())
                     .loanType(req.getLoanType())
-                    .repaymentFrequency(req.getRepaymentFrequency())
+                    .repaymentFrequency(normalizeRepaymentFrequency(req.getRepaymentFrequency()))
                     .gender(req.getGender())
                     .riskCategory(req.getRiskCategory())
                     .rawPayload(objectMapper.writeValueAsString(req))
@@ -224,12 +270,23 @@ public class BorrowerEvaluationService {
                 .loanAmount(req.getLoanAmount())
                 .interestRate(req.getInterestRate())
                 .tenure(req.getTenure())
-                .emi(req.getEmi())
+                .emi(estimatedMonthlyPayment(req))
                 .age(req.getAge())
                 .borrowerType(req.getBorrowerType())
+                .repaymentFrequency(normalizeRepaymentFrequency(req.getRepaymentFrequency()))
                 .repeated(req.getRepeated())
                 .trusted(trusted)
                 .build();
+    }
+
+    private BigDecimal estimatedMonthlyPayment(BorrowerEvaluateRequest req) {
+        return req.getLoanAmount().divide(
+                BigDecimal.valueOf(req.getTenure()), 8, RoundingMode.HALF_UP);
+    }
+
+    private String normalizeRepaymentFrequency(String repaymentFrequency) {
+        if (repaymentFrequency == null || repaymentFrequency.isBlank()) return null;
+        return repaymentFrequency.trim().toUpperCase(Locale.ROOT);
     }
 
     private boolean isTrustedRule(String ruleName) {

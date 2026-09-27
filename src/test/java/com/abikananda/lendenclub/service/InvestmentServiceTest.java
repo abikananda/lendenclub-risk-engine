@@ -9,6 +9,7 @@ import com.abikananda.lendenclub.entity.Lender;
 import com.abikananda.lendenclub.entity.LendingSession;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import com.abikananda.lendenclub.repository.InvestmentRepository;
+import com.abikananda.lendenclub.exception.InvestmentConflictException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -141,11 +142,26 @@ class InvestmentServiceTest {
                 "SESSION-2", "LOAN-1", InvestmentStatus.SUCCESS)).thenReturn(Optional.empty());
         when(investmentRepository.findByExternalInvestmentId("EXT-1")).thenReturn(Optional.of(existing));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(InvestmentConflictException.class,
                 () -> service.recordStatus(request("SESSION-2", "EXT-1", InvestmentStatus.SUCCESS)));
 
         verify(investmentRepository, never()).save(any());
         verify(sessionService, never()).recordInvestmentResult(isA(LendingSession.class), anyBoolean(), isA(BigDecimal.class));
+    }
+
+    @Test
+    void alreadySuccessfulInvestmentForSameLenderCannotBeRecordedAgain() {
+        LendingSession session = LendingSession.builder()
+                .sessionId("SESSION-2").lender(Lender.builder().id(10L).build()).build();
+        when(sessionService.requireActiveSessionForUpdate("SESSION-2")).thenReturn(session);
+        when(investmentRepository.existsByLender_IdAndLoanIdAndStatus(10L, "LOAN-1", InvestmentStatus.SUCCESS))
+                .thenReturn(true);
+
+        assertThrows(InvestmentConflictException.class,
+                () -> service.recordStatus(request("SESSION-2", null, InvestmentStatus.SUCCESS)));
+
+        verify(investmentRepository).existsByLender_IdAndLoanIdAndStatus(10L, "LOAN-1", InvestmentStatus.SUCCESS);
+        verify(investmentRepository, never()).save(any());
     }
 
     private InvestmentStatusRequest request(String sessionId, String externalId, InvestmentStatus status) {
