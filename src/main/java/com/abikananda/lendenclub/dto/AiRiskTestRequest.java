@@ -59,7 +59,7 @@ public class AiRiskTestRequest {
                 .loanAmount(loanAmount)
                 .interestRate(interestRate)
                 .tenure(tenure)
-                .emi(loanAmount.divide(BigDecimal.valueOf(tenure), 2, RoundingMode.HALF_UP))
+                .emi(loanAmount.divide(BigDecimal.valueOf(tenure), 8, RoundingMode.HALF_UP))
                 .age(age)
                 .borrowerType(borrowerType)
                 .repeated(repeated)

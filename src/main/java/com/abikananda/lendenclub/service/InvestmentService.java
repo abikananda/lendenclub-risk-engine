@@ -7,7 +7,9 @@ import com.abikananda.lendenclub.dto.InvestmentSummaryResponse;
 import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.Investment;
 import com.abikananda.lendenclub.entity.LendingSession;
+import com.abikananda.lendenclub.exception.InvestmentConflictException;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
+import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
 import com.abikananda.lendenclub.repository.InvestmentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,17 +29,20 @@ public class InvestmentService {
     private static final Logger log = LoggerFactory.getLogger(InvestmentService.class);
 
     private final InvestmentRepository investmentRepository;
+    private final BorrowerEvaluationRepository evaluationRepository;
     private final BorrowerSnapshotRepository snapshotRepository;
     private final LendingSessionService sessionService;
     private final BorrowerIdentityService borrowerIdentityService;
     private final AuditService auditService;
 
     public InvestmentService(InvestmentRepository investmentRepository,
+                             BorrowerEvaluationRepository evaluationRepository,
                              BorrowerSnapshotRepository snapshotRepository,
                              LendingSessionService sessionService,
                              BorrowerIdentityService borrowerIdentityService,
                              AuditService auditService) {
         this.investmentRepository = investmentRepository;
+        this.evaluationRepository = evaluationRepository;
         this.snapshotRepository = snapshotRepository;
         this.sessionService = sessionService;
         this.borrowerIdentityService = borrowerIdentityService;
@@ -66,12 +71,18 @@ public class InvestmentService {
             Optional<Investment> existing = investmentRepository.findByExternalInvestmentId(req.getExternalInvestmentId());
             if (existing.isPresent()) {
                 Investment previous = existing.get();
-                if (!previous.getSessionId().equals(req.getSessionId())) {
-                    throw new IllegalStateException("External investment ID already belongs to a different session");
+                if (!previous.getSessionId().equals(req.getSessionId())
+                        || !previous.getLoanId().equals(req.getLoanId())) {
+                    throw new InvestmentConflictException("External investment ID already belongs to a different session or loan");
                 }
                 log.info("Idempotent duplicate ignored for externalInvestmentId={}", req.getExternalInvestmentId());
                 return mapToResponse(previous);
             }
+        }
+
+        if (req.getStatus() == InvestmentStatus.SUCCESS
+                && evaluationRepository.markInvested(session.getLender().getId(), req.getLoanId(), req.getSessionId()) == 0) {
+            throw new InvestmentConflictException("Loan is not approved for this session or its investment was already recorded");
         }
 
         BorrowerProfile borrowerProfile = snapshotRepository

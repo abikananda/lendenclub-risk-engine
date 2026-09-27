@@ -3,6 +3,7 @@ package com.abikananda.lendenclub.service;
 import com.abikananda.lendenclub.domain.BorrowerFact;
 import com.abikananda.lendenclub.domain.EvaluationResult;
 import com.abikananda.lendenclub.domain.LendingDecision;
+import com.abikananda.lendenclub.domain.RiskLevel;
 import com.abikananda.lendenclub.domain.LendingRule;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateResponse;
@@ -79,7 +80,7 @@ public class BorrowerEvaluationService {
     }
 
     private BorrowerEvaluateResponse evaluateAndPersist(BorrowerEvaluateRequest req, String ruleName) {
-        sessionService.validateAndTouchSession(req.getSessionId());
+        var session = sessionService.validateAndTouchSession(req.getSessionId());
 
         var previousApproval = evaluationRepository
                 .findFirstBySessionIdAndLoanIdAndDecisionOrderByEvaluatedAtDesc(
@@ -149,6 +150,18 @@ public class BorrowerEvaluationService {
 
         var aiResult = aiRiskService.evaluate(fact);
         EvaluationResult finalResult = hybridRiskDecisionService.apply(result, aiResult);
+
+        if (finalResult.getDecision() == LendingDecision.INVEST
+                && evaluationRepository.claimLoan(session.getLender().getId(), req.getLoanId(), req.getSessionId()) == 0) {
+            auditService.logEvent("BORROWER_DUPLICATE_APPROVAL_SKIPPED", req.getSessionId(), req.getLoanId(),
+                    "Loan already approved for this lender in another rule run or session");
+            return BorrowerEvaluateResponse.builder()
+                    .loanId(req.getLoanId()).sessionId(req.getSessionId())
+                    .decision(LendingDecision.SKIP).riskLevel(RiskLevel.UNKNOWN)
+                    .investmentAmount(BigDecimal.ZERO).rule(responseRule)
+                    .reason("Loan already approved for this lender in an earlier rule run")
+                    .build();
+        }
 
         BorrowerEvaluation evaluation = BorrowerEvaluation.builder()
                 .loanId(req.getLoanId())
@@ -265,7 +278,7 @@ public class BorrowerEvaluationService {
 
     private BigDecimal estimatedMonthlyPayment(BorrowerEvaluateRequest req) {
         return req.getLoanAmount().divide(
-                BigDecimal.valueOf(req.getTenure()), 2, RoundingMode.HALF_UP);
+                BigDecimal.valueOf(req.getTenure()), 8, RoundingMode.HALF_UP);
     }
 
     private String normalizeRepaymentFrequency(String repaymentFrequency) {
