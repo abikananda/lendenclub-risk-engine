@@ -29,20 +29,17 @@ public class InvestmentService {
     private static final Logger log = LoggerFactory.getLogger(InvestmentService.class);
 
     private final InvestmentRepository investmentRepository;
-    private final BorrowerEvaluationRepository evaluationRepository;
     private final BorrowerSnapshotRepository snapshotRepository;
     private final LendingSessionService sessionService;
     private final BorrowerIdentityService borrowerIdentityService;
     private final AuditService auditService;
 
     public InvestmentService(InvestmentRepository investmentRepository,
-                             BorrowerEvaluationRepository evaluationRepository,
                              BorrowerSnapshotRepository snapshotRepository,
                              LendingSessionService sessionService,
                              BorrowerIdentityService borrowerIdentityService,
                              AuditService auditService) {
         this.investmentRepository = investmentRepository;
-        this.evaluationRepository = evaluationRepository;
         this.snapshotRepository = snapshotRepository;
         this.sessionService = sessionService;
         this.borrowerIdentityService = borrowerIdentityService;
@@ -81,8 +78,9 @@ public class InvestmentService {
         }
 
         if (req.getStatus() == InvestmentStatus.SUCCESS
-                && evaluationRepository.markInvested(session.getLender().getId(), req.getLoanId(), req.getSessionId()) == 0) {
-            throw new InvestmentConflictException("Loan is not approved for this session or its investment was already recorded");
+                && investmentRepository.existsByLender_IdAndLoanIdAndStatus(
+                        session.getLender().getId(), req.getLoanId(), InvestmentStatus.SUCCESS)) {
+            throw new InvestmentConflictException("Loan already invested by this lender");
         }
 
         BorrowerProfile borrowerProfile = snapshotRepository

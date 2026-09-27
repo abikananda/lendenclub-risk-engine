@@ -3,6 +3,7 @@ package com.abikananda.lendenclub.service;
 import com.abikananda.lendenclub.domain.EvaluationResult;
 import com.abikananda.lendenclub.domain.RiskLevel;
 import com.abikananda.lendenclub.domain.LendingDecision;
+import com.abikananda.lendenclub.domain.InvestmentStatus;
 import com.abikananda.lendenclub.domain.AiRiskResult;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
 import com.abikananda.lendenclub.entity.BorrowerProfile;
@@ -10,6 +11,7 @@ import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.entity.Lender;
 import com.abikananda.lendenclub.entity.LendingSession;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
+import com.abikananda.lendenclub.repository.InvestmentRepository;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +39,7 @@ class BorrowerEvaluationServiceTest {
     @Mock private AiRiskService aiRiskService;
     @Mock private BorrowerSnapshotRepository snapshotRepository;
     @Mock private BorrowerEvaluationRepository evaluationRepository;
+    @Mock private InvestmentRepository investmentRepository;
     @Mock private BorrowerIdentityService borrowerIdentityService;
     @Mock private TrustedBorrowerService trustedBorrowerService;
     @Mock private AuditService auditService;
@@ -45,6 +48,8 @@ class BorrowerEvaluationServiceTest {
 
     @BeforeEach
     void setUp() {
+        when(sessionService.validateAndTouchSession("SESSION-1"))
+                .thenReturn(LendingSession.builder().lender(Lender.builder().id(10L).build()).build());
         service = new BorrowerEvaluationService(
                 sessionService,
                 droolsService,
@@ -52,6 +57,7 @@ class BorrowerEvaluationServiceTest {
                 new HybridRiskDecisionService("off"),
                 snapshotRepository,
                 evaluationRepository,
+                investmentRepository,
                 borrowerIdentityService,
                 trustedBorrowerService,
                 auditService,
@@ -117,39 +123,24 @@ class BorrowerEvaluationServiceTest {
     }
 
     @Test
-    void repeatedApprovalAcrossRulesReturnsSkipWithoutSavingAnotherApproval() {
+    void previouslyInvestedLoanSkipsWithoutRunningAnotherRule() {
         BorrowerEvaluateRequest request = request();
-        request.setEmi(new BigDecimal("99999"));
-        request.setRepaymentFrequency(" daily ");
-        when(sessionService.validateAndTouchSession("SESSION-1"))
-                .thenReturn(LendingSession.builder().lender(Lender.builder().id(10L).build()).build());
-        when(borrowerIdentityService.resolveOrCreate("Test Borrower", "FEMALE", "SALARIED", 35))
-                .thenReturn(profile());
-        when(droolsService.evaluateSpecificRule(any(), eq("SESSION-1"), eq("Daily Repayment Lenders")))
-                .thenReturn(EvaluationResult.builder().decision(LendingDecision.INVEST)
-                        .riskLevel(RiskLevel.MEDIUM).investmentAmount(new BigDecimal("2000"))
-                        .ruleName("Daily Repayment Lenders").build());
-        when(aiRiskService.evaluate(any())).thenReturn(AiRiskResult.builder().build());
+        when(investmentRepository.existsByLender_IdAndLoanIdAndStatus(10L, "LOAN-1", InvestmentStatus.SUCCESS))
+                .thenReturn(true);
 
         var response = service.evaluateSpecificRule(request, "Daily Repayment Lenders");
 
         assertEquals(LendingDecision.SKIP, response.getDecision());
         assertEquals(BigDecimal.ZERO, response.getInvestmentAmount());
-        verify(evaluationRepository).claimLoan(10L, "LOAN-1", "SESSION-1");
         verify(evaluationRepository, never()).save(any());
-        ArgumentCaptor<com.abikananda.lendenclub.domain.BorrowerFact> fact =
-                ArgumentCaptor.forClass(com.abikananda.lendenclub.domain.BorrowerFact.class);
-        verify(droolsService).evaluateSpecificRule(fact.capture(), eq("SESSION-1"), eq("Daily Repayment Lenders"));
-        assertEquals("DAILY", fact.getValue().getRepaymentFrequency());
-        assertEquals(0, new BigDecimal("1250").compareTo(fact.getValue().getEmi()));
+        verify(droolsService, never()).evaluateSpecificRule(any(), any(), any());
     }
 
     @Test
-    void firstApprovalClaimsLenderLoanBeforeReturningInvest() {
+    void loanWithoutSuccessfulInvestmentCanBeApproved() {
         BorrowerEvaluateRequest request = request();
-        request.setEmi(null);
-        when(sessionService.validateAndTouchSession("SESSION-1"))
-                .thenReturn(LendingSession.builder().lender(Lender.builder().id(10L).build()).build());
+        request.setEmi(new BigDecimal("99999"));
+        request.setRepaymentFrequency(" daily ");
         when(borrowerIdentityService.resolveOrCreate("Test Borrower", "FEMALE", "SALARIED", 35))
                 .thenReturn(profile());
         when(droolsService.evaluateSpecificRule(any(), eq("SESSION-1"), eq("Bulk Lenders")))
@@ -157,7 +148,6 @@ class BorrowerEvaluationServiceTest {
                         .riskLevel(RiskLevel.HIGH).investmentAmount(new BigDecimal("250"))
                         .ruleName("Bulk Lenders").build());
         when(aiRiskService.evaluate(any())).thenReturn(AiRiskResult.builder().build());
-        when(evaluationRepository.claimLoan(10L, "LOAN-1", "SESSION-1")).thenReturn(1);
         when(evaluationRepository.save(any())).thenAnswer(invocation -> {
             com.abikananda.lendenclub.entity.BorrowerEvaluation evaluation = invocation.getArgument(0);
             evaluation.setId(42L);
@@ -168,7 +158,12 @@ class BorrowerEvaluationServiceTest {
 
         assertEquals(LendingDecision.INVEST, response.getDecision());
         assertEquals(42L, response.getEvaluationId());
-        verify(evaluationRepository).claimLoan(10L, "LOAN-1", "SESSION-1");
+        verify(investmentRepository).existsByLender_IdAndLoanIdAndStatus(10L, "LOAN-1", InvestmentStatus.SUCCESS);
+        ArgumentCaptor<com.abikananda.lendenclub.domain.BorrowerFact> fact =
+                ArgumentCaptor.forClass(com.abikananda.lendenclub.domain.BorrowerFact.class);
+        verify(droolsService).evaluateSpecificRule(fact.capture(), eq("SESSION-1"), eq("Bulk Lenders"));
+        assertEquals("DAILY", fact.getValue().getRepaymentFrequency());
+        assertEquals(0, new BigDecimal("1250").compareTo(fact.getValue().getEmi()));
     }
 
     private BorrowerProfile profile() {

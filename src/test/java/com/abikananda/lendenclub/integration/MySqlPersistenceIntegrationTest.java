@@ -144,13 +144,6 @@ class MySqlPersistenceIntegrationTest {
         assertEquals("FEMALE", persistedSnapshot.getGender());
         assertEquals("LOW", persistedSnapshot.getRiskCategory());
 
-        LendingSession laterSession = sessionService.createSession(lender);
-        BorrowerEvaluateResponse duplicateAcrossSessions = borrowerEvaluationService.evaluateSpecificRule(
-                borrowerRequest(laterSession.getSessionId(), "LOAN-EVAL-MATCH", 620, 760, "93566", "5500"),
-                "Bulk Lenders");
-        assertEquals(LendingDecision.SKIP, duplicateAcrossSessions.getDecision());
-        assertEquals(1, evaluationRepository.findByLoanId("LOAN-EVAL-MATCH").size());
-
         InvestmentStatusRequest request = InvestmentStatusRequest.builder()
                 .sessionId(session.getSessionId())
                 .loanId("LOAN-EVAL-MATCH")
@@ -162,6 +155,13 @@ class MySqlPersistenceIntegrationTest {
 
         investmentService.recordStatus(request);
         investmentService.recordStatus(request);
+
+        LendingSession laterSession = sessionService.createSession(lender);
+        BorrowerEvaluateResponse duplicateAcrossSessions = borrowerEvaluationService.evaluateSpecificRule(
+                borrowerRequest(laterSession.getSessionId(), "LOAN-EVAL-MATCH", 620, 760, "93566", "5500"),
+                "Bulk Lenders");
+        assertEquals(LendingDecision.SKIP, duplicateAcrossSessions.getDecision());
+        assertEquals(1, evaluationRepository.findByLoanId("LOAN-EVAL-MATCH").size());
 
         assertThrows(InvestmentConflictException.class, () -> investmentService.recordStatus(
                 InvestmentStatusRequest.builder().sessionId(laterSession.getSessionId())

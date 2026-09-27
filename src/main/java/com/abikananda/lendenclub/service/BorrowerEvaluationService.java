@@ -3,6 +3,7 @@ package com.abikananda.lendenclub.service;
 import com.abikananda.lendenclub.domain.BorrowerFact;
 import com.abikananda.lendenclub.domain.EvaluationResult;
 import com.abikananda.lendenclub.domain.LendingDecision;
+import com.abikananda.lendenclub.domain.InvestmentStatus;
 import com.abikananda.lendenclub.domain.RiskLevel;
 import com.abikananda.lendenclub.domain.LendingRule;
 import com.abikananda.lendenclub.dto.BorrowerEvaluateRequest;
@@ -11,6 +12,7 @@ import com.abikananda.lendenclub.entity.BorrowerEvaluation;
 import com.abikananda.lendenclub.entity.BorrowerProfile;
 import com.abikananda.lendenclub.entity.BorrowerSnapshot;
 import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
+import com.abikananda.lendenclub.repository.InvestmentRepository;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -37,6 +39,7 @@ public class BorrowerEvaluationService {
     private final HybridRiskDecisionService hybridRiskDecisionService;
     private final BorrowerSnapshotRepository snapshotRepository;
     private final BorrowerEvaluationRepository evaluationRepository;
+    private final InvestmentRepository investmentRepository;
     private final BorrowerIdentityService borrowerIdentityService;
     private final TrustedBorrowerService trustedBorrowerService;
     private final AuditService auditService;
@@ -49,6 +52,7 @@ public class BorrowerEvaluationService {
                                      HybridRiskDecisionService hybridRiskDecisionService,
                                      BorrowerSnapshotRepository snapshotRepository,
                                      BorrowerEvaluationRepository evaluationRepository,
+                                     InvestmentRepository investmentRepository,
                                      BorrowerIdentityService borrowerIdentityService,
                                      TrustedBorrowerService trustedBorrowerService,
                                      AuditService auditService,
@@ -60,6 +64,7 @@ public class BorrowerEvaluationService {
         this.hybridRiskDecisionService = hybridRiskDecisionService;
         this.snapshotRepository = snapshotRepository;
         this.evaluationRepository = evaluationRepository;
+        this.investmentRepository = investmentRepository;
         this.borrowerIdentityService = borrowerIdentityService;
         this.trustedBorrowerService = trustedBorrowerService;
         this.auditService = auditService;
@@ -81,6 +86,16 @@ public class BorrowerEvaluationService {
 
     private BorrowerEvaluateResponse evaluateAndPersist(BorrowerEvaluateRequest req, String ruleName) {
         var session = sessionService.validateAndTouchSession(req.getSessionId());
+
+        if (investmentRepository.existsByLender_IdAndLoanIdAndStatus(
+                session.getLender().getId(), req.getLoanId(), InvestmentStatus.SUCCESS)) {
+            return BorrowerEvaluateResponse.builder()
+                    .loanId(req.getLoanId()).sessionId(req.getSessionId())
+                    .decision(LendingDecision.SKIP).riskLevel(RiskLevel.UNKNOWN)
+                    .investmentAmount(BigDecimal.ZERO)
+                    .reason("Loan already invested by this lender")
+                    .build();
+        }
 
         var previousApproval = evaluationRepository
                 .findFirstBySessionIdAndLoanIdAndDecisionOrderByEvaluatedAtDesc(
@@ -150,18 +165,6 @@ public class BorrowerEvaluationService {
 
         var aiResult = aiRiskService.evaluate(fact);
         EvaluationResult finalResult = hybridRiskDecisionService.apply(result, aiResult);
-
-        if (finalResult.getDecision() == LendingDecision.INVEST
-                && evaluationRepository.claimLoan(session.getLender().getId(), req.getLoanId(), req.getSessionId()) == 0) {
-            auditService.logEvent("BORROWER_DUPLICATE_APPROVAL_SKIPPED", req.getSessionId(), req.getLoanId(),
-                    "Loan already approved for this lender in another rule run or session");
-            return BorrowerEvaluateResponse.builder()
-                    .loanId(req.getLoanId()).sessionId(req.getSessionId())
-                    .decision(LendingDecision.SKIP).riskLevel(RiskLevel.UNKNOWN)
-                    .investmentAmount(BigDecimal.ZERO).rule(responseRule)
-                    .reason("Loan already approved for this lender in an earlier rule run")
-                    .build();
-        }
 
         BorrowerEvaluation evaluation = BorrowerEvaluation.builder()
                 .loanId(req.getLoanId())

@@ -8,7 +8,6 @@ import com.abikananda.lendenclub.entity.Investment;
 import com.abikananda.lendenclub.entity.Lender;
 import com.abikananda.lendenclub.entity.LendingSession;
 import com.abikananda.lendenclub.repository.BorrowerSnapshotRepository;
-import com.abikananda.lendenclub.repository.BorrowerEvaluationRepository;
 import com.abikananda.lendenclub.repository.InvestmentRepository;
 import com.abikananda.lendenclub.exception.InvestmentConflictException;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,8 +35,6 @@ class InvestmentServiceTest {
     @Mock
     private InvestmentRepository investmentRepository;
     @Mock
-    private BorrowerEvaluationRepository evaluationRepository;
-    @Mock
     private BorrowerSnapshotRepository snapshotRepository;
     @Mock
     private LendingSessionService sessionService;
@@ -52,7 +49,6 @@ class InvestmentServiceTest {
     void setUp() {
         service = new InvestmentService(
                 investmentRepository,
-                evaluationRepository,
                 snapshotRepository,
                 sessionService,
                 borrowerIdentityService,
@@ -77,7 +73,6 @@ class InvestmentServiceTest {
         when(investmentRepository.findFirstBySessionIdAndLoanIdAndStatusOrderByRequestedAtDesc(
                 "SESSION-1", "LOAN-1", InvestmentStatus.SUCCESS)).thenReturn(Optional.empty());
         when(investmentRepository.findByExternalInvestmentId("EXT-1")).thenReturn(Optional.empty());
-        when(evaluationRepository.markInvested(10L, "LOAN-1", "SESSION-1")).thenReturn(1);
         when(snapshotRepository.findTopBySessionIdAndLoanIdOrderByScrapedAtDesc("SESSION-1", "LOAN-1"))
                 .thenReturn(Optional.of(snapshot));
         when(investmentRepository.save(any())).thenAnswer(invocation -> {
@@ -155,15 +150,17 @@ class InvestmentServiceTest {
     }
 
     @Test
-    void successWithoutAnUnspentApprovalCannotBeRecorded() {
+    void alreadySuccessfulInvestmentForSameLenderCannotBeRecordedAgain() {
         LendingSession session = LendingSession.builder()
                 .sessionId("SESSION-2").lender(Lender.builder().id(10L).build()).build();
         when(sessionService.requireActiveSessionForUpdate("SESSION-2")).thenReturn(session);
+        when(investmentRepository.existsByLender_IdAndLoanIdAndStatus(10L, "LOAN-1", InvestmentStatus.SUCCESS))
+                .thenReturn(true);
 
         assertThrows(InvestmentConflictException.class,
                 () -> service.recordStatus(request("SESSION-2", null, InvestmentStatus.SUCCESS)));
 
-        verify(evaluationRepository).markInvested(10L, "LOAN-1", "SESSION-2");
+        verify(investmentRepository).existsByLender_IdAndLoanIdAndStatus(10L, "LOAN-1", InvestmentStatus.SUCCESS);
         verify(investmentRepository, never()).save(any());
     }
 
