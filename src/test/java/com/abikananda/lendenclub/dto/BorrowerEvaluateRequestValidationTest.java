@@ -21,7 +21,9 @@ class BorrowerEvaluateRequestValidationTest {
 
     @Test
     void validRequestPassesValidationWithOptionalProfileFieldsPresent() {
-        var violations = validator.validate(validRequest());
+        BorrowerEvaluateRequest request = validRequest();
+        request.setEmi(null); // The platform does not supply EMI.
+        var violations = validator.validate(request);
         assertTrue(violations.isEmpty());
     }
 
@@ -34,13 +36,13 @@ class BorrowerEvaluateRequestValidationTest {
         request.setLoanAmount(new BigDecimal("-1"));
         request.setInterestRate(BigDecimal.ZERO);
         request.setTenure(0);
-        request.setEmi(BigDecimal.ZERO);
+        request.setEmi(null);
         request.setBorrowerType(" ");
         request.setRepeated(null);
 
         var violations = validator.validate(request);
 
-        assertEquals(9, violations.size());
+        assertEquals(8, violations.size());
     }
 
     private BorrowerEvaluateRequest validRequest() {
