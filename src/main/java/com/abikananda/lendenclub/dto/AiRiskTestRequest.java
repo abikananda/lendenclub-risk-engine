@@ -10,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Data
 @Builder
@@ -35,7 +36,7 @@ public class AiRiskTestRequest {
     @NotNull @Positive
     private Integer tenure;
 
-    @NotNull @Positive
+    // Optional legacy input; the derived monthly principal payment is authoritative.
     private BigDecimal emi;
 
     @NotNull @Positive
@@ -58,7 +59,7 @@ public class AiRiskTestRequest {
                 .loanAmount(loanAmount)
                 .interestRate(interestRate)
                 .tenure(tenure)
-                .emi(emi)
+                .emi(loanAmount.divide(BigDecimal.valueOf(tenure), 2, RoundingMode.HALF_UP))
                 .age(age)
                 .borrowerType(borrowerType)
                 .repeated(repeated)
